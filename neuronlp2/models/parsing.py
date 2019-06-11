@@ -271,6 +271,9 @@ class BiRecurrentConvBiAffine(nn.Module):
 
         return parser.decode_MST(energy.cpu().numpy(), length, leading_symbolic=leading_symbolic, labeled=True)
 
+    def return_word_embedd(self):
+        return self.word_embedd
+
 
 class StackPtrNet(nn.Module):
     def __init__(self, word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters, kernel_size,

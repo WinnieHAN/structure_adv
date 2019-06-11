@@ -603,10 +603,10 @@ def main():
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
             inp = word
             _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
-            # TODO: actually here we should use word, char, pos, mask, lengths of seq2seq decoder output
-            with torch.no_grad():
-                heads_pred, types_pred = decode(word, char, pos, mask=masks, length=lengths, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-            ls_rl_bh = loss_biaf_rl(sel, pb, heads_pred, heads, mask_id=2)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+            # # TODO: actually here we should use word, char, pos, mask, lengths of seq2seq decoder output
+            # with torch.no_grad():
+            #     heads_pred, types_pred = decode(word, char, pos, mask=masks, length=lengths, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+            ls_rl_bh = loss_biaf_rl(sel, pb, predicted_out=heads, golden_out=heads, mask_id=2)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
             optim_bia_rl.zero_grad()
             ls_rl_bh.backward()
             optim_bia_rl.step()
