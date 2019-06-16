@@ -1,9 +1,9 @@
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-
 import numpy as np
 import torch
 import math
+
 
 class Seq2seq_Model(nn.Module):
     def __init__(self, EMB=8, HID=64, DPr=0.5, vocab_size=None, word_embedd=None):

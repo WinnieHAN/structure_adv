@@ -27,7 +27,7 @@ from neuronlp2.io import CoNLLXWriter
 from neuronlp2.tasks import parser
 from neuronlp2.nn.utils import freeze_embedding
 from seq2seq_rl.seq2seq import Seq2seq_Model
-from seq2seq_rl.rl import LossRL, LossBiafRL
+from seq2seq_rl.rl import LossRL, LossBiafRL, get_bleu
 
 
 uid = uuid.uuid4().hex[:6]
@@ -555,9 +555,11 @@ def main():
 
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     optim_seq2seq = torch.optim.Adam(seq2seq.parameters(), lr=0.0002)
-    for _ in range(0):
+    for i in range(1000):
         ls_seq2seq_ep = 0
         seq2seq.train()
+        network.train()
+        print('----------'+str(i)+' iter----------')
         for _ in range(1, num_batches + 1):
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size,
                                                                                          unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
@@ -585,6 +587,30 @@ def main():
         for pg in optim_seq2seq.param_groups:
             pg['lr'] *= DECAY
 
+        # test th bleu of seq2seq
+        if i%1 == 0:
+            seq2seq.eval()
+            network.eval()
+            bleu_ep = 0
+            for _ in range(1, num_batches + 1):
+                word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_dev, batch_size,
+                                                                                             unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
+                inp, _ = seq2seq.add_noise(word, lengths)
+                dec_out = word
+                sel = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+                sel = sel.detach().cpu().numpy()
+                dec_out = dec_out.cpu().numpy()
+
+                bleus = []
+                for i in range(sel.shape[0]):
+                    bleu = get_bleu(sel[i], dec_out[i], num_words)
+
+                    bleus.append(bleu)
+
+                bleu_bh = np.average(bleus)
+                bleu_ep += bleu_bh
+            bleu_ep /= num_batches
+            print('Valid: %.4f%%' % (bleu_ep * 100))
 
     # Pretrain seq2seq model using token wise adv examples. model name: seq2seq model
     print('Pretrain seq2seq model using token wise adv examples.')
@@ -597,7 +623,7 @@ def main():
     M = 1  # this is the size of beam searching ?
     optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=0.00005)
     loss_biaf_rl = LossBiafRL().to(device)
-    for _ in range(1):
+    for _ in range(0):
         ls_rl_ep = 0
         network.train()
         seq2seq.train()
