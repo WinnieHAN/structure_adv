@@ -69,13 +69,13 @@ class LossRL(nn.Module):
         return ls
 
 
-def get_reward(out, dec_out):
+def get_reward(out, dec_out, length_out):
     # out = out.tolist()
     # dec_out = dec_out.tolist()
 
-    dda = sum([1 if out[i]==dec_out[i] else 0 for i in range(min(len(out), len(dec_out)))])
+    stc_dda = sum([1 if out[i]==dec_out[i] else 0 for i in range(1, length_out)])
 
-    return dda
+    return stc_dda
 
 
 class LossBiafRL(nn.Module):
@@ -85,19 +85,18 @@ class LossBiafRL(nn.Module):
         self.bl = 0
         self.bn = 0
 
-    def forward(self, sel, pb, predicted_out, golden_out, mask_id):
+    def forward(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out):
         ls = 0
         cnt = 0
 
         stc_length = sel.shape[1]
         sel = sel.detach().cpu().numpy()
-        # predicted_out = predicted_out.cpu().numpy()
         golden_out = golden_out.cpu().numpy()
 
         batch = sel.shape[0]
         bleus = []
         for i in range(batch):  #batch
-            bleu = get_reward(predicted_out[i], golden_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            bleu = get_reward(predicted_out[i], golden_out[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
 
             bleus.append(bleu)
         bleus = np.asarray(bleus)
@@ -118,3 +117,5 @@ class LossBiafRL(nn.Module):
         self.bn += 1
 
         return ls
+        # a = (- pb).sum() * 0.000001
+        # return a

@@ -81,6 +81,10 @@ def main():
 
     args = args_parser.parse_args()
 
+    args.train = "data/ptb/dev.conllu"
+    args.dev = "data/ptb/dev.conllu"
+    args.test = "data/ptb/dev.conllu"
+
     logger = get_logger("GraphParser")
 
     mode = args.mode
@@ -551,13 +555,13 @@ def main():
 
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     optim_seq2seq = torch.optim.Adam(seq2seq.parameters(), lr=0.0002)
-    for e in range(EPOCHS):
+    for _ in range(0):
         ls_seq2seq_ep = 0
         seq2seq.train()
-        for batch in range(1, num_batches + 1):
+        for _ in range(1, num_batches + 1):
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size,
                                                                                          unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
-            inp = seq2seq.add_noise(word)
+            inp, _ = seq2seq.add_noise(word, lengths)
             dec_out = word
             wgt = masks
             dec_inp = torch.cat((word[:,0:1], word[:,0:-1]), dim=1)  # maybe wrong
@@ -577,7 +581,7 @@ def main():
 
             ls_seq2seq_bh = ls_seq2seq_bh.cpu().detach().numpy()
             ls_seq2seq_ep += ls_seq2seq_bh
-
+        print('ls_seq2seq_ep: ', ls_seq2seq_ep)
         for pg in optim_seq2seq.param_groups:
             pg['lr'] *= DECAY
 
@@ -593,54 +597,40 @@ def main():
     M = 1  # this is the size of beam searching ?
     optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=0.00005)
     loss_biaf_rl = LossBiafRL().to(device)
-    network.eval()
-    for e in range(EPOCHS):
+    for _ in range(1):
         ls_rl_ep = 0
+        network.train()
         seq2seq.train()
 
-        for batch in range(1, num_batches + 1):
+        for _ in range(1, num_batches + 1):
             # train_rl
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
             inp = word
-            _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
-            # # TODO: actually here we should use word, char, pos, mask, lengths of seq2seq decoder output
-            # with torch.no_grad():
-            #     heads_pred, types_pred = decode(word, char, pos, mask=masks, length=lengths, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-            ls_rl_bh = loss_biaf_rl(sel, pb, predicted_out=heads, golden_out=heads, mask_id=2)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
-            optim_bia_rl.zero_grad()
-            ls_rl_bh.backward()
-            optim_bia_rl.step()
-            ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
-            ls_rl_ep += ls_rl_bh
+            if True:  # inp.size()[1]<15 TODO: debug hanwj
+                print(inp.size()[1])
+                _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
+                decode = network.decode_mst
+                END_token = word_alphabet.instance2index['_END']
+                end_position = torch.eq(sel, END_token).nonzero()
+                masks_sel = torch.ones_like(sel, dtype=torch.float)
+                lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1]-1)  # -1 TODO: because of end token in the end
+                if not len(end_position)==0:
+                    for ij in end_position:
+                        lengths_sel[ij[0]] = ij[1]+1
+                        masks_sel[ij[0], ij[1]+1:-1] = 0  # -1 TODO: because of end token in the end
 
+                with torch.no_grad():
+                    heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
+                                                    leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                ls_rl_bh = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                optim_bia_rl.zero_grad()
+                ls_rl_bh.backward()
+                optim_bia_rl.step()
+                ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
+                ls_rl_ep += ls_rl_bh
+                print('ls_rl_ep: ', ls_rl_ep)
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= DECAY
-
-        torch.save(seq2seq.state_dict(), 'Model/model_seq2seq-rl_%d.pt' % (e + 1))
-
-        # evaluate performance on dev data
-        # bleu_ep = 0
-        # seq2seq.eval()
-        # with tqdm(ld_vl) as TQ:
-        #     for inp, _, dec_out, _ in TQ:
-        #         sel = model(inp.long().to(device))
-        #
-        #         sel = sel.detach().cpu().numpy()
-        #         dec_out = dec_out.numpy()
-        #
-        #         bleus = []
-        #         for i in range(sel.shape[0]):
-        #             bleu = get_bleu(sel[i], dec_out[i])
-        #
-        #             bleus.append(bleu)
-        #
-        #         bleu_bh = np.average(bleus)
-        #         bleu_ep += bleu_bh
-        #
-        #         TQ.set_postfix(bleu_bh='%.3f%%' % (bleu_bh * 100))
-        #
-        #     bleu_ep /= len(TQ)
-        #     print('Valid: %.4f%%' % (bleu_ep * 100))
 
 
 if __name__ == '__main__':
