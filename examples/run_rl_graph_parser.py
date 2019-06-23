@@ -28,7 +28,7 @@ from neuronlp2.tasks import parser
 from neuronlp2.nn.utils import freeze_embedding
 from seq2seq_rl.seq2seq import Seq2seq_Model
 from seq2seq_rl.rl import LossRL, LossBiafRL, get_bleu
-
+from stack_parser_eval import third_party_parser
 
 uid = uuid.uuid4().hex[:6]
 
@@ -81,9 +81,9 @@ def main():
 
     args = args_parser.parse_args()
 
-    args.train = "data/ptb/dev.conllu"
-    args.dev = "data/ptb/dev.conllu"
-    args.test = "data/ptb/dev.conllu"
+    # args.train = "data/ptb/dev.conllu"
+    # args.dev = "data/ptb/dev.conllu"
+    # args.test = "data/ptb/dev.conllu"
 
     logger = get_logger("GraphParser")
 
@@ -127,9 +127,9 @@ def main():
 
     use_pos = args.pos
     pos_dim = args.pos_dim
-    # word_dict, word_dim = utils.load_embedding_dict(word_embedding, word_path)
-    word_dict = {}  # debug hanwj
-    word_dim = 8  # debug hanwj
+    word_dict, word_dim = utils.load_embedding_dict(word_embedding, word_path)
+    # word_dict = {}  # debug hanwj
+    # word_dim = 8  # debug hanwj
     char_dict = None
     char_dim = args.char_dim
     if char_embedding != 'random':
@@ -550,12 +550,12 @@ def main():
     EPOCHS = 0  # 80
     DECAY = 0.97
     shared_word_embedd = network.return_word_embedd()
-    seq2seq = Seq2seq_Model(EMB=8, HID=64, DPr=0.5, vocab_size=num_words, word_embedd=shared_word_embedd).to(device)  # debug hanwj
+    seq2seq = Seq2seq_Model(EMB=word_dim, HID=args.hidden_size, DPr=0.5, vocab_size=num_words, word_embedd=shared_word_embedd).to(device)  # debug hanwj
     print(seq2seq)
 
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     optim_seq2seq = torch.optim.Adam(seq2seq.parameters(), lr=0.0002)
-    for i in range(1000):
+    for i in range(EPOCHS):
         ls_seq2seq_ep = 0
         seq2seq.train()
         network.train()
@@ -603,7 +603,7 @@ def main():
 
                 bleus = []
                 for i in range(sel.shape[0]):
-                    bleu = get_bleu(sel[i], dec_out[i], num_words)
+                    bleu = get_bleu(sel[i], dec_out[i], num_words)  # sel
 
                     bleus.append(bleu)
 
@@ -611,19 +611,27 @@ def main():
                 bleu_ep += bleu_bh
             bleu_ep /= num_batches
             print('Valid: %.4f%%' % (bleu_ep * 100))
-
+    # for debug TODO:
+    # torch.save(seq2seq.state_dict(), args.seq2seq_save_path)
+    # torch.save(network.state_dict(), args.network_save_path)
     # Pretrain seq2seq model using token wise adv examples. model name: seq2seq model
     print('Pretrain seq2seq model using token wise adv examples.')
 
 
     # Train seq2seq model using rl with reward of biaffine. model name: seq2seq model
     print('Train seq2seq model using rl with reward of biaffine.')
+
+
+    # import third_party_parser
+    sudo_golden_parser = third_party_parser(device, word_table, char_table)
+
+
     EPOCHS = 1  # 80
     DECAY = 0.97
     M = 1  # this is the size of beam searching ?
     optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=0.00005)
     loss_biaf_rl = LossBiafRL().to(device)
-    for _ in range(0):
+    for _ in range(EPOCHS):
         ls_rl_ep = 0
         network.train()
         seq2seq.train()
@@ -631,8 +639,9 @@ def main():
         for _ in range(1, num_batches + 1):
             # train_rl
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
+            sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(word, char, pos, masks, lengths, beam=1)  # beam=1 ?? it should be equal to M TODO:
             inp = word
-            if True:  # inp.size()[1]<15 TODO: debug hanwj
+            if True:  #inp.size()[1]<15: #TODO: debug hanwj
                 print(inp.size()[1])
                 _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
                 decode = network.decode_mst
@@ -648,7 +657,7 @@ def main():
                 with torch.no_grad():
                     heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
                                                     leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                ls_rl_bh = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                ls_rl_bh = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
                 optim_bia_rl.zero_grad()
                 ls_rl_bh.backward()
                 optim_bia_rl.step()

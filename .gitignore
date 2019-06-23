@@ -1,4 +1,11 @@
 pytorch_seq2seq-rl
+examples/run_eval.sh
+*.pyc
+bist-parser/bmstparser/
+bist-parser/output/
+bist-parser/pretrained/
+bist-parser/sskip.100.vectors
+bist-parser/.idea/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

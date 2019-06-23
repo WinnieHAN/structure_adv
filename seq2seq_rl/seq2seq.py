@@ -13,17 +13,18 @@ class Seq2seq_Model(nn.Module):
         self.EMB = EMB
         self.HID = HID
         self.DP = nn.Dropout(DPr)
+        self.num_layers = 3
 
         self.emb = word_embedd  # nn.Embedding(self.vocab_size + 2, self.EMB)
 
         self.enc = nn.GRU(self.EMB, self.HID,
-                          batch_first=True, bidirectional=True)
-        self.dec = nn.GRU(self.EMB, self.HID * 2,
-                          batch_first=True)
+                          batch_first=True, bidirectional=True, num_layers=self.num_layers)
+        self.dec = nn.GRU(self.EMB, self.HID * 2,  # because of bidirection
+                          batch_first=True, num_layers=self.num_layers)
 
         self.att = nn.Parameter(torch.FloatTensor(self.HID * 2, self.HID * 2))
 
-        self.fc = nn.Linear(self.HID * 2 * 2, self.vocab_size + 2)
+        self.fc = nn.Linear(self.HID * 2 * 2, self.vocab_size + 2)  # self.vocab_size + 2
 
         self.init()
 
@@ -51,7 +52,8 @@ class Seq2seq_Model(nn.Module):
         inp = self.emb(inp)
         out_enc, h = self.enc(inp)  # (50, 30, 128) (2, 50, 64)
         out_enc = self.DP(out_enc)
-        h = h.view((1, inp.shape[0], 2 * self.HID))  #(1, 50, 128)
+        # h = h.view((1, inp.shape[0], 2 * self.HID * self.num_layers)) #(1, 50, 128)
+        h = h.view((self.num_layers, 2, inp.shape[0], self.HID)).transpose(1, 2).contiguous().view((self.num_layers, inp.shape[0], 2*self.HID))  # **h_n** of shape `(num_layers * num_directions, batch, hidden_size)`
 
         if not dec_inp is None:
             out, _ = self.run_dec(dec_inp, out_enc, h)
@@ -104,7 +106,7 @@ class Seq2seq_Model(nn.Module):
         """
         Randomly blank input words.
         """
-        word_blank = 0.1
+        word_blank = 0
         blank_index = 0  # should be defined TODO:
         pad_index = 0  # should be defined TODO:
         # define words to blank

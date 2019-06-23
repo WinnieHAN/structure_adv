@@ -486,7 +486,7 @@ sub read_sent
       printf STDERR "Word/pos mismatch, line %d:\n", $line_num ;
       printf STDERR " gold: %s", $line_g ;
       printf STDERR " sys : %s", $line_s ;
-      exit(1) ;
+      #exit(1) ;
     }
 
     push @{$sent_sys}, { %fields_s } ;

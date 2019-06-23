@@ -291,7 +291,6 @@ def main():
     test_total_nopunc = 0
     test_total_inst = 0
     test_total_root = 0
-
     patient = 0
     decay = 0
     max_decay = args.max_decay
