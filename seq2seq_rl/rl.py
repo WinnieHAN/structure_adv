@@ -28,6 +28,9 @@ def get_bleu(out, dec_out, vocab_size):
     return bleu
 
 
+def get_correct(out, dec_out, length):
+    stc_dda = sum([1 if out[i] == dec_out[i] else 0 for i in range(1, length)])
+    return stc_dda, length-1
 
 class LossRL(nn.Module):
     def __init__(self):
@@ -140,5 +143,5 @@ class LossBiafRL(nn.Module):
 
         bleu1 = np.average(bleus1)
 
-        loss = - ls + ls1
-        return loss
+        loss = -ls1  #- ls + ls1
+        return loss, ls, ls1, bleu, bleu1

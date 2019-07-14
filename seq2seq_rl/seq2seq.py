@@ -17,11 +17,11 @@ class Seq2seq_Model(nn.Module):
 
         self.emb = word_embedd  # nn.Embedding(self.vocab_size + 2, self.EMB)
 
-        self.enc = nn.GRU(self.EMB, self.HID,
+        self.enc = nn.LSTM(self.EMB, self.HID,  # GRU
                           batch_first=True, bidirectional=True, num_layers=self.num_layers)
-        self.dec = nn.GRU(self.EMB, self.HID * 2,  # because of bidirection
+        self.dec = nn.LSTM(self.EMB, self.HID * 2,  # because of bidirection
                           batch_first=True, num_layers=self.num_layers)
-
+        self.isLSTM = True
         self.att = nn.Parameter(torch.FloatTensor(self.HID * 2, self.HID * 2))
 
         self.fc = nn.Linear(self.HID * 2 * 2, self.vocab_size + 2)  # self.vocab_size + 2
@@ -53,8 +53,13 @@ class Seq2seq_Model(nn.Module):
         out_enc, h = self.enc(inp)  # (50, 30, 128) (2, 50, 64)
         out_enc = self.DP(out_enc)
         # h = h.view((1, inp.shape[0], 2 * self.HID * self.num_layers)) #(1, 50, 128)
-        h = h.view((self.num_layers, 2, inp.shape[0], self.HID)).transpose(1, 2).contiguous().view((self.num_layers, inp.shape[0], 2*self.HID))  # **h_n** of shape `(num_layers * num_directions, batch, hidden_size)`
 
+        if self.isLSTM:
+            h = (h[0].view((self.num_layers, 2, inp.shape[0], self.HID)).transpose(1, 2).contiguous().view((self.num_layers, inp.shape[0], 2*self.HID)), h[1].view((self.num_layers, 2, inp.shape[0], self.HID)).transpose(1, 2).contiguous().view((self.num_layers, inp.shape[0], 2*self.HID)) ) # **h_n** of shape `(num_layers * num_directions, batch, hidden_size)`
+        else:
+            h = h.view((self.num_layers, 2, inp.shape[0], self.HID)).transpose(1, 2).contiguous().view((self.num_layers, inp.shape[0], 2*self.HID))
+
+        # if it is LSTM, output h is (h,c)
         if not dec_inp is None:
             out, _ = self.run_dec(dec_inp, out_enc, h)
 
@@ -64,7 +69,10 @@ class Seq2seq_Model(nn.Module):
             dec_inp = torch.ones((inp.shape[0], 1)).long().cuda() * 2  # id of start: self.vocab_size # START [50,1]
 
             if is_tr == True:
-                h = torch.cat([h for _ in range(M)], dim=1)  # (1, 200, 128)
+                if self.isLSTM:
+                    h = (torch.cat([h[0] for _ in range(M)], dim=1), torch.cat([h[1] for _ in range(M)], dim=1))  # (1, 200, 128)
+                else:
+                    h = torch.cat([h for _ in range(M)], dim=1)  # (1, 200, 128)
                 out_enc = torch.cat([out_enc for _ in range(M)], dim=0)  # (200, 30,128)
 
                 dec_inp = torch.cat([dec_inp for _ in range(M)], dim=0)  # (200, 1)

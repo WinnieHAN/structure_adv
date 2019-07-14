@@ -55,3 +55,13 @@ class CoNLLXWriter(object):
                 h = head[i, j]
                 self.__source_file.write('%d\t%s\t_\t_\t%s\t_\t%d\t%s\n' % (j, w, p, h, t))
             self.__source_file.write('\n')
+
+    def write_stc(self, word, lengths, symbolic_root=False, symbolic_end=False):
+        batch_size, _ = word.shape
+        start = 1 if symbolic_root else 0
+        end = 1 if symbolic_end else 0
+        for i in range(batch_size):
+            for j in range(start, lengths[i] - end):
+                w = self.__word_alphabet.get_instance(word[i, j]).encode('utf-8')
+                self.__source_file.write('%s\t' % (w))
+            self.__source_file.write('\n')
