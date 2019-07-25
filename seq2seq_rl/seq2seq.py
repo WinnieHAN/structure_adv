@@ -99,7 +99,7 @@ class Seq2seq_Model(nn.Module):
             if is_tr == True:
                 return out, sel, pb
             else:
-                return sel
+                return sel, pb
 
     def add_noise(self, words, lengths):
         """

@@ -88,7 +88,7 @@ class LossBiafRL(nn.Module):
         self.bl = 0
         self.bn = 0
 
-    def forward(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out):
+    def forward(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out, sudo_golden_out_1):
         ls = 0
         cnt = 0
 
@@ -121,7 +121,6 @@ class LossBiafRL(nn.Module):
         ########
         ls1 = 0
         cnt1 = 0
-        # sudo_golden_out = sudo_golden_out.cpu().numpy()
 
         batch = sel.shape[0]
         bleus1 = []
@@ -140,8 +139,30 @@ class LossBiafRL(nn.Module):
             wgt1 = wgt1.__and__(sel[:, j] != mask_id)  # vocab_size + 1
 
         ls1 /= cnt1
-
         bleu1 = np.average(bleus1)
 
-        loss = -ls1  #- ls + ls1
+        ########
+        ls2 = 0
+        cnt2 = 0
+
+        batch = sel.shape[0]
+        bleus2 = []
+        for i in range(batch):  #batch
+            bleu = get_reward(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            bleus2.append(bleu)
+        bleus2 = np.asarray(bleus2)
+
+        wgt2 = np.asarray([1 for _ in range(batch)])
+        for j in range(stc_length):
+            ls1 += (- pb[:, j] *
+                   torch.from_numpy(bleus2).float().cuda() *
+                   torch.from_numpy(wgt2.astype(float)).float().cuda()).sum()
+            cnt2 += np.sum(wgt2)
+
+            wgt2 = wgt2.__and__(sel[:, j] != mask_id)  # vocab_size + 1
+
+        ls2 /= cnt2
+        bleu2 = np.average(bleus2)
+
+        loss = -ls1 -ls2  #- ls + ls1
         return loss, ls, ls1, bleu, bleu1

@@ -85,6 +85,12 @@ def main():
     args_parser.add_argument('--seq2seq_load_path', default='models/seq2seq/seq2seq_save_model', type=str, help='seq2seq_load_path')
     args_parser.add_argument('--network_load_path', default='models/seq2seq/network_save_model', type=str, help='network_load_path')
 
+    args_parser.add_argument('--rl_finetune_seq2seq_save_path', default='models/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_save_path')
+    args_parser.add_argument('--rl_finetune_network_save_path', default='models/rl_finetune/network_save_model', type=str, help='rl_finetune_network_save_path')
+
+    args_parser.add_argument('--rl_finetune_seq2seq_load_path', default='models/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
+    args_parser.add_argument('--rl_finetune_network_load_path', default='models/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
+
 
     args = args_parser.parse_args()
 
@@ -315,7 +321,7 @@ def main():
     max_decay = 9
     double_schedule_decay = 5
     num_epochs = 0  # debug hanwj
-    # network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))  # TODO: 7.13
+    network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))  # TODO: 7.13
     network.to(device)
     for epoch in range(1, num_epochs + 1):
         print('Epoch %d (%s, optim: %s, learning rate=%.6f, eps=%.1e, decay rate=%.2f (schedule=%d, patient=%d, decay=%d)): ' % (epoch, mode, opt, lr, eps, decay_rate, schedule, patient, decay))
@@ -557,24 +563,27 @@ def main():
 
     # Pretrain seq2seq model using denoising autoencoder. model name: seq2seq model
     print('Pretrain seq2seq model using denoising autoencoder.')
-    EPOCHS = 80  # 80
+    EPOCHS = 0  # 150
     DECAY = 0.97
     shared_word_embedd = network.return_word_embedd()
+    shared_word_embedd.weight.requires_grad = False
     seq2seq = Seq2seq_Model(EMB=word_dim, HID=args.hidden_size, DPr=0.5, vocab_size=num_words, word_embedd=shared_word_embedd).to(device)  # debug hanwj
+    seq2seq.emb.weight.requires_grad = False
     print(seq2seq)
 
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     optim_seq2seq = torch.optim.Adam(seq2seq.parameters(), lr=0.0002)
 
-    # seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(110) + '.pt'))  # TODO: 7.13
-    # seq2seq.to(device)
-    # network.load_state_dict(torch.load(args.network_load_path + str(110) + '.pt'))  # TODO: 7.13
-    # network.to(device)
+    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(199) + '.pt'))  # TODO: 7.13
+    seq2seq.to(device)
+    network.load_state_dict(torch.load(args.network_load_path + str(199) + '.pt'))  # TODO: 7.13
+    network.to(device)
 
     for i in range(EPOCHS):
         ls_seq2seq_ep = 0
         seq2seq.train()
         network.train()
+        seq2seq.emb.weight.requires_grad = False
         print('----------'+str(i)+' iter----------')
         for _ in range(1, num_batches + 1):
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size,
@@ -617,7 +626,7 @@ def main():
                 word, char, pos, heads, types, masks, lengths = batch
                 inp, _ = seq2seq.add_noise(word, lengths)
                 dec_out = word
-                sel = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+                sel, _ = seq2seq(inp.long().to(device), LEN=inp.size()[1])
                 sel = sel.detach().cpu().numpy()
                 dec_out = dec_out.cpu().numpy()
 
@@ -648,20 +657,29 @@ def main():
 
 
     # import third_party_parser
-    sudo_golden_parser = third_party_parser(device, word_table, char_table)
+    sudo_golden_parser = third_party_parser(device, word_table, char_table, 0)
+    sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, 1)
     sudo_golden_parser.eval()
+    sudo_golden_parser_1.eval()
 
-    EPOCHS = 0  # 80
+    EPOCHS = 100  # 80
     DECAY = 0.97
     M = 1  # this is the size of beam searching ?
     optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=0.00005)
     loss_biaf_rl = LossBiafRL().to(device)
+
+    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(110) + '.pt'))  # TODO: 7.13
+    # seq2seq.to(device)
+    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(110) + '.pt'))  # TODO: 7.13
+    # network.to(device)
+
     for epoch_i in range(EPOCHS):
         ls_rl_ep = 0
         ls_0_ep = 0
         ls_1_ep = 0
         network.eval()  # only train seq2seq
         seq2seq.train()
+        seq2seq.emb.weight.requires_grad = True
         # num_batches = 0
         for _ in range(1, num_batches + 1): #num_batches
             # train_rl
@@ -669,7 +687,7 @@ def main():
             # sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(word, char, pos, masks, lengths, beam=1)  # beam=1 ?? it should be equal to M TODO:
             inp = word
             if True:  #inp.size()[1]<15:#True:  #inp.size()[1]<15: #TODO: debug hanwj
-                print(inp.size()[1])
+                # print(inp.size()[1])
                 _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
                 decode = network.decode_mst
                 END_token = word_alphabet.instance2index['_END']
@@ -686,7 +704,9 @@ def main():
                                                     leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                     sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel, lengths_sel,
                                                                                   beam=1)  # beam=1 ?? it should be equal to M TODO:
-                ls_rl_bh, ls, ls_3party, r_bleu, r_bleu_3party = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                    sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel, lengths_sel,
+                                                                                  beam=1)  # beam=1 ?? it should be equal to M TODO:
+                ls_rl_bh, ls, ls_3party, r_bleu, r_bleu_3party = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
                 optim_bia_rl.zero_grad()
                 ls_rl_bh.backward()
                 optim_bia_rl.step()
@@ -705,6 +725,10 @@ def main():
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= DECAY
 
+        if epoch_i > 0:
+            torch.save(seq2seq.state_dict(), args.rl_finetune_seq2seq_save_path + str(epoch_i) + '.pt')
+            torch.save(network.state_dict(), args.rl_finetune_network_save_path + str(epoch_i) + '.pt')
+
         ####eval######
         seq2seq.eval()
         network.eval()
@@ -712,10 +736,12 @@ def main():
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
         pred_filename_test = 'tmp1/pred_test%d' % (epoch_i)
         pred_writer_test.start(pred_filename_test)
+        nll = 0
+        token_num = 0
         for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):
             word, char, pos, heads, types, masks, lengths = batch
             inp = word  #, _ = seq2seq.add_noise(word, lengths)
-            sel = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+            sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
             END_token = word_alphabet.instance2index['_END']
             end_position = torch.eq(sel, END_token).nonzero()
             masks_sel = torch.ones_like(sel, dtype=torch.float)
@@ -724,33 +750,42 @@ def main():
                 for ij in end_position:
                     lengths_sel[ij[0]] = ij[1] + 1
                     masks_sel[ij[0], ij[1] + 1:-1] = 0  # -1 TODO: because of end token in the end
-            sel = sel.detach().cpu().numpy()
-            lengths_sel = lengths_sel.detach().cpu().numpy()
-            pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
 
             with torch.no_grad():
                 heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
                                                 leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                 sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel, lengths_sel,
                                                                               beam=1)  # beam=1 ?? it should be equal to M TODO:
+                sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel, lengths_sel,
+                                                                              beam=1)  # beam=1 ?? it should be equal to M TODO:
             ls_rl_bh, ls, ls_3party, r_bleu, r_bleu_3party = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                           golden_out=heads, mask_id=END_token,
                                                                           stc_length_out=lengths_sel,
-                                                                          sudo_golden_out=sudo_heads_pred)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                                                                          sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+
             ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
             ls_rl_ep += ls_rl_bh
             ls = ls.cpu().detach().numpy()
             ls_0_ep += ls
             ls_3party = ls_3party.cpu().detach().numpy()
             ls_1_ep += ls_3party
+            sel = sel.detach().cpu().numpy()
+            lengths_sel = lengths_sel.detach().cpu().numpy()
+            pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
+
+            for i in range(len(lengths_sel)):
+                nll += sum(pb[1:lengths_sel[i]])
+            token_num += sum(lengths_sel)-len(lengths_sel)
+        nll /= token_num
+
         print('test ls_rl_ep: ', ls_rl_ep)
         print('test ls_0_ep: ', ls_0_ep)
         print('test ls_1_ep: ', ls_1_ep)
         print('test r_bleu: ', r_bleu)
         print('test r_bleu_3party: ', r_bleu_3party)
+        print('test Perplexity: ', math.exp(nll))
 
         pred_writer_test.close()
-
 
 
 if __name__ == '__main__':

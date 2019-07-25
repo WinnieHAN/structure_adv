@@ -32,10 +32,13 @@ uid = uuid.uuid4().hex[:6]
 
 
 class third_party_parser(nn.Module):
-    def __init__(self, device, word_table, char_table):
+    def __init__(self, device, word_table, char_table, model_id):
         super(third_party_parser, self).__init__()
         # mode = args.mode
-        model_path = "models/parsing/stack_ptr/"  # args.model_path
+        if model_id==0:
+            model_path = "models/parsing/stack_ptr/"  # args.model_path
+        elif model_id==1:
+            model_path = "models/parsing/stack_ptr/"  # args.model_path
         model_name = 'network.pt'  # args.model_name
 
         model_name = os.path.join(model_path, model_name)
@@ -53,8 +56,8 @@ class third_party_parser(nn.Module):
         p_out = parameters['p_out']
         p_rnn = parameters['p_rnn']
         True = parameters['biaffine']
-        use_pos = parameters['pos']
-        use_char = parameters['char']
+        use_pos = False  #parameters['pos']
+        use_char = False  #parameters['char']
         prior_order = parameters['prior_order']
         skipConnect = parameters['skipConnect']
         grandPar = parameters['grandPar']
