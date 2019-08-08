@@ -6,7 +6,7 @@ Implementation of Bi-directional LSTM-CNNs-TreeCRF model for Graph-based depende
 """
 
 import sys
-import os
+import os, math
 
 sys.path.append(".")
 sys.path.append("..")
@@ -563,7 +563,7 @@ def main():
 
     # Pretrain seq2seq model using denoising autoencoder. model name: seq2seq model
     print('Pretrain seq2seq model using denoising autoencoder.')
-    EPOCHS = 0  # 150
+    EPOCHS = 1  # 150
     DECAY = 0.97
     shared_word_embedd = network.return_word_embedd()
     shared_word_embedd.weight.requires_grad = False
@@ -574,10 +574,10 @@ def main():
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     optim_seq2seq = torch.optim.Adam(seq2seq.parameters(), lr=0.0002)
 
-    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(199) + '.pt'))  # TODO: 7.13
-    seq2seq.to(device)
-    network.load_state_dict(torch.load(args.network_load_path + str(199) + '.pt'))  # TODO: 7.13
-    network.to(device)
+    # seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(199) + '.pt'))  # TODO: 7.13
+    # seq2seq.to(device)
+    # network.load_state_dict(torch.load(args.network_load_path + str(199) + '.pt'))  # TODO: 7.13
+    # network.to(device)
 
     for i in range(EPOCHS):
         ls_seq2seq_ep = 0
@@ -662,7 +662,7 @@ def main():
     sudo_golden_parser.eval()
     sudo_golden_parser_1.eval()
 
-    EPOCHS = 100  # 80
+    EPOCHS = 1  # 80
     DECAY = 0.97
     M = 1  # this is the size of beam searching ?
     optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=0.00005)
@@ -686,27 +686,36 @@ def main():
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
             # sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(word, char, pos, masks, lengths, beam=1)  # beam=1 ?? it should be equal to M TODO:
             inp = word
+            print(inp.size()[1])
             if True:  #inp.size()[1]<15:#True:  #inp.size()[1]<15: #TODO: debug hanwj
-                # print(inp.size()[1])
-                _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
                 decode = network.decode_mst
                 END_token = word_alphabet.instance2index['_END']
-                end_position = torch.eq(sel, END_token).nonzero()
-                masks_sel = torch.ones_like(sel, dtype=torch.float)
-                lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1]-1)  # -1 TODO: because of end token in the end
-                if not len(end_position)==0:
-                    for ij in end_position:
-                        lengths_sel[ij[0]] = ij[1]+1
-                        masks_sel[ij[0], ij[1]+1:-1] = 0  # -1 TODO: because of end token in the end
+                # try:
+                _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
+                sel1 = sel.data.detach()
+                end_position = torch.eq(sel1, END_token).nonzero()
+                masks_sel = torch.ones_like(sel1, dtype=torch.float)
+                lengths_sel = torch.ones_like(lengths).fill_(sel1.shape[1])  #sel1.shape[1]-1 TODO: because of end token in the end
+                # except RuntimeError:
+                #     print('RuntimeError_hanwj')
+                #     print(inp)
+                # if not len(end_position)==0:
+                #     for ij in end_position:
+                #         lengths_sel[ij[0]] = ij[1]+1
+                #         masks_sel[ij[0], ij[1]+1:-1] = 0  # -1 TODO: because of end token in the end
 
                 with torch.no_grad():
+                    # try:
                     heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
-                                                    leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                                                        leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                    # except RuntimeError:
+                    #     print('RuntimeError_hanwj')
+                    #     continue
                     sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel, lengths_sel,
                                                                                   beam=1)  # beam=1 ?? it should be equal to M TODO:
-                    sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel, lengths_sel,
-                                                                                  beam=1)  # beam=1 ?? it should be equal to M TODO:
-                ls_rl_bh, ls, ls_3party, r_bleu, r_bleu_3party = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                    # sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel, lengths_sel,
+                    #                                                                     beam=1)  # beam=1 ?? it should be equal to M TODO:
+                ls_rl_bh, ls, ls_3party, r_bleu, r_bleu_3party = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=None)  #sudo_heads_pred_1 TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
                 optim_bia_rl.zero_grad()
                 ls_rl_bh.backward()
                 optim_bia_rl.step()
@@ -716,7 +725,7 @@ def main():
                 ls_0_ep += ls
                 ls_3party = ls_3party.cpu().detach().numpy()
                 ls_1_ep += ls_3party
-        if True:
+        if False:
             print('ls_rl_ep: ', ls_rl_ep)
             print('ls_0_ep: ', ls_0_ep)
             print('ls_1_ep: ', ls_1_ep)

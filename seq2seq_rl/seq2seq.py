@@ -24,7 +24,7 @@ class Seq2seq_Model(nn.Module):
         self.isLSTM = True
         self.att = nn.Parameter(torch.FloatTensor(self.HID * 2, self.HID * 2))
 
-        self.fc = nn.Linear(self.HID * 2 * 2, self.vocab_size + 2)  # self.vocab_size + 2
+        self.fc = nn.Linear(self.HID * 2 * 2, self.vocab_size)  # self.vocab_size + 2
 
         self.init()
 

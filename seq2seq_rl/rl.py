@@ -89,80 +89,80 @@ class LossBiafRL(nn.Module):
         self.bn = 0
 
     def forward(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out, sudo_golden_out_1):
-        ls = 0
-        cnt = 0
-
-        stc_length = sel.shape[1]
-        sel = sel.detach().cpu().numpy()
-        golden_out = golden_out.cpu().numpy()
-
-        batch = sel.shape[0]
-        bleus = []
-        for i in range(batch):  #batch
-            bleu = get_reward(predicted_out[i], golden_out[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
-            bleus.append(bleu)
-        bleus = np.asarray(bleus)
-
-        wgt = np.asarray([1 for _ in range(batch)])
-        for j in range(stc_length):
-            ls += (- pb[:, j] *
-                   torch.from_numpy(bleus - self.bl).float().cuda() *
-                   torch.from_numpy(wgt.astype(float)).float().cuda()).sum()
-            cnt += np.sum(wgt)
-
-            wgt = wgt.__and__(sel[:, j] != mask_id)  # vocab_size + 1
-
-        ls /= cnt
-
-        bleu = np.average(bleus)
-        self.bl = (self.bl * self.bn + bleu) / (self.bn + 1)
-        self.bn += 1
+        # ls = 0
+        # cnt = 0
+        #
+        # stc_length = sel.shape[1]
+        # sel = sel.detach().cpu().numpy()
+        # golden_out = golden_out.cpu().numpy()
+        #
+        # batch = sel.shape[0]
+        # bleus = []
+        # for i in range(batch):  #batch
+        #     bleu = get_reward(predicted_out[i], golden_out[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+        #     bleus.append(bleu)
+        # bleus = np.asarray(bleus)
+        #
+        # wgt = np.asarray([1 for _ in range(batch)])
+        # for j in range(stc_length):
+        #     ls += (- pb[:, j] *
+        #            torch.from_numpy(bleus - self.bl).float().cuda() *
+        #            torch.from_numpy(wgt.astype(float)).float().cuda()).sum()
+        #     cnt += np.sum(wgt)
+        #
+        #     wgt = wgt.__and__(sel[:, j] != mask_id)  # vocab_size + 1
+        #
+        # ls /= cnt
+        #
+        # bleu = np.average(bleus)
+        # self.bl = (self.bl * self.bn + bleu) / (self.bn + 1)
+        # self.bn += 1
 
         ########
         ls1 = 0
         cnt1 = 0
-
+        stc_length_seq = sel.shape[1]
         batch = sel.shape[0]
-        bleus1 = []
+        rewards = []
         for i in range(batch):  #batch
-            bleu = get_reward(predicted_out[i], sudo_golden_out[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
-            bleus1.append(bleu)
-        bleus1 = np.asarray(bleus1)
+            reward = get_reward(predicted_out[i], sudo_golden_out[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            rewards.append(reward)
+        rewards = np.asarray(rewards)
 
-        wgt1 = np.asarray([1 for _ in range(batch)])
-        for j in range(stc_length):
+        for j in range(stc_length_seq):
+            wgt1 = np.asarray([1 if j < stc_length_out[i] else 0 for i in range(batch)])
             ls1 += (- pb[:, j] *
-                   torch.from_numpy(bleus1).float().cuda() *
-                   torch.from_numpy(wgt1.astype(float)).float().cuda()).sum()
+                    torch.from_numpy(rewards).float().cuda() *
+                    torch.from_numpy(wgt1.astype(float)).float().cuda()).sum()
             cnt1 += np.sum(wgt1)
 
-            wgt1 = wgt1.__and__(sel[:, j] != mask_id)  # vocab_size + 1
+            # wgt1 = wgt1.__and__(sel[:, j] != mask_id)  # vocab_size + 1
 
         ls1 /= cnt1
-        bleu1 = np.average(bleus1)
+        rewards_ave = np.average(rewards)
 
-        ########
-        ls2 = 0
-        cnt2 = 0
+        # ########
+        # ls2 = 0
+        # cnt2 = 0
+        #
+        # batch = sel.shape[0]
+        # bleus2 = []
+        # for i in range(batch):  #batch
+        #     bleu = get_reward(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+        #     bleus2.append(bleu)
+        # bleus2 = np.asarray(bleus2)
+        #
+        # wgt2 = np.asarray([1 for _ in range(batch)])
+        # for j in range(stc_length):
+        #     ls1 += (- pb[:, j] *
+        #            torch.from_numpy(bleus2).float().cuda() *
+        #            torch.from_numpy(wgt2.astype(float)).float().cuda()).sum()
+        #     cnt2 += np.sum(wgt2)
+        #
+        #     wgt2 = wgt2.__and__(sel[:, j] != mask_id)  # vocab_size + 1
+        #
+        # ls2 /= cnt2
+        # bleu2 = np.average(bleus2)
 
-        batch = sel.shape[0]
-        bleus2 = []
-        for i in range(batch):  #batch
-            bleu = get_reward(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
-            bleus2.append(bleu)
-        bleus2 = np.asarray(bleus2)
-
-        wgt2 = np.asarray([1 for _ in range(batch)])
-        for j in range(stc_length):
-            ls1 += (- pb[:, j] *
-                   torch.from_numpy(bleus2).float().cuda() *
-                   torch.from_numpy(wgt2.astype(float)).float().cuda()).sum()
-            cnt2 += np.sum(wgt2)
-
-            wgt2 = wgt2.__and__(sel[:, j] != mask_id)  # vocab_size + 1
-
-        ls2 /= cnt2
-        bleu2 = np.average(bleus2)
-
-        loss = -ls1 -ls2  #- ls + ls1
-        return loss, ls, ls1, bleu, bleu1
+        loss = -ls1# -ls2
+        return loss, loss, ls1, rewards_ave, rewards_ave #loss, ls, ls1, bleu, bleu1
