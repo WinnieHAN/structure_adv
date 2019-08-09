@@ -1,3 +1,8 @@
+bist_parser/pretrained/
+bist_parser/sskip.100.vectors
+bist_parser/output/
+dumped1
+dumped
 tmp1/
 run.sh
 run1.sh

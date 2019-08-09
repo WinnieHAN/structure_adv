@@ -165,7 +165,7 @@ def main():
     logger.info("Type Alphabet Size: %d" % num_types)
 
     logger.info("Reading Data")
-    device = torch.device('cuda:0') if args.cuda else torch.device('cpu')
+    device = torch.device('cuda:0') #torch.device('cpu') #torch.device('cuda:0') if args.cuda else torch.device('cpu') #TODO:8.8
 
     data_train = conllx_data.read_data_to_tensor(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet, symbolic_root=True, device=device)
     # data_train = conllx_data.read_data(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
@@ -563,21 +563,21 @@ def main():
 
     # Pretrain seq2seq model using denoising autoencoder. model name: seq2seq model
     print('Pretrain seq2seq model using denoising autoencoder.')
-    EPOCHS = 1  # 150
+    EPOCHS = 10  # 150
     DECAY = 0.97
     shared_word_embedd = network.return_word_embedd()
     shared_word_embedd.weight.requires_grad = False
-    seq2seq = Seq2seq_Model(EMB=word_dim, HID=args.hidden_size, DPr=0.5, vocab_size=num_words, word_embedd=shared_word_embedd).to(device)  # debug hanwj
+    seq2seq = Seq2seq_Model(EMB=word_dim, HID=args.hidden_size, DPr=0.5, vocab_size=num_words, word_embedd=shared_word_embedd, device=device).to(device)  # debug hanwj
     seq2seq.emb.weight.requires_grad = False
     print(seq2seq)
 
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     optim_seq2seq = torch.optim.Adam(seq2seq.parameters(), lr=0.0002)
 
-    # seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(199) + '.pt'))  # TODO: 7.13
-    # seq2seq.to(device)
-    # network.load_state_dict(torch.load(args.network_load_path + str(199) + '.pt'))  # TODO: 7.13
-    # network.to(device)
+    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(1) + '.pt'))  # TODO: 7.13
+    seq2seq.to(device)
+    network.load_state_dict(torch.load(args.network_load_path + str(1) + '.pt'))  # TODO: 7.13
+    network.to(device)
 
     for i in range(EPOCHS):
         ls_seq2seq_ep = 0
@@ -662,75 +662,86 @@ def main():
     sudo_golden_parser.eval()
     sudo_golden_parser_1.eval()
 
-    EPOCHS = 1  # 80
+    import pickle
+    from bist_parser.barchybrid.src.arc_hybrid import ArcHybridLSTM
+    params = 'bist_parser/pretrained/model1/params.pickle'
+    external_embedding = 'bist_parser/sskip.100.vectors'
+    model = 'bist_parser/pretrained/model1/barchybrid.model30'
+    with open(params, 'r') as paramsfp:
+        words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
+
+    stored_opt.external_embedding = external_embedding
+    bist_parser = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
+    bist_parser.Load(model)
+
+    EPOCHS = 100  # 80
     DECAY = 0.97
     M = 1  # this is the size of beam searching ?
-    optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=0.00005)
-    loss_biaf_rl = LossBiafRL().to(device)
+    optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=1e-4)  #0.00005
+    loss_biaf_rl = LossBiafRL(device=device).to(device)
 
     # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(110) + '.pt'))  # TODO: 7.13
     # seq2seq.to(device)
     # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(110) + '.pt'))  # TODO: 7.13
     # network.to(device)
 
+    parser_select = ['stackPtr0', 'bist']
+
     for epoch_i in range(EPOCHS):
-        ls_rl_ep = 0
-        ls_0_ep = 0
-        ls_1_ep = 0
+        print('======='+str(epoch_i)+'=========')
+        ls_rl_ep = ls_1_ep = ls_2_ep = rewards_ave1_ep = rewards_ave2_ep = 0
         network.eval()  # only train seq2seq
         seq2seq.train()
         seq2seq.emb.weight.requires_grad = True
-        # num_batches = 0
+        num_batches = 50   # TODO:8.9
         for _ in range(1, num_batches + 1): #num_batches
             # train_rl
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
-            # sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(word, char, pos, masks, lengths, beam=1)  # beam=1 ?? it should be equal to M TODO:
             inp = word
-            print(inp.size()[1])
             if True:  #inp.size()[1]<15:#True:  #inp.size()[1]<15: #TODO: debug hanwj
                 decode = network.decode_mst
-                END_token = word_alphabet.instance2index['_END']
-                # try:
+                END_token = word_alphabet.instance2index['_END']  # ==1
                 _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
                 sel1 = sel.data.detach()
                 end_position = torch.eq(sel1, END_token).nonzero()
                 masks_sel = torch.ones_like(sel1, dtype=torch.float)
                 lengths_sel = torch.ones_like(lengths).fill_(sel1.shape[1])  #sel1.shape[1]-1 TODO: because of end token in the end
-                # except RuntimeError:
-                #     print('RuntimeError_hanwj')
-                #     print(inp)
-                # if not len(end_position)==0:
-                #     for ij in end_position:
-                #         lengths_sel[ij[0]] = ij[1]+1
-                #         masks_sel[ij[0], ij[1]+1:-1] = 0  # -1 TODO: because of end token in the end
+                if not len(end_position)==0:
+                    for ij in end_position:
+                        lengths_sel[ij[0]] = ij[1]
+                        masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
 
                 with torch.no_grad():
-                    # try:
                     heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
                                                         leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                    # except RuntimeError:
-                    #     print('RuntimeError_hanwj')
-                    #     continue
-                    sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel, lengths_sel,
+                    if 'stackPtr0' in parser_select:
+                        sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel, lengths_sel,
                                                                                   beam=1)  # beam=1 ?? it should be equal to M TODO:
-                    # sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel, lengths_sel,
-                    #                                                                     beam=1)  # beam=1 ?? it should be equal to M TODO:
-                ls_rl_bh, ls, ls_3party, r_bleu, r_bleu_3party = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=None)  #sudo_heads_pred_1 TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                    if 'stackPtr1' in parser_select:
+                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel, lengths_sel,
+                                                                                        beam=1)  # beam=1 ?? it should be equal to M TODO:
+                    elif 'bist' in parser_select:
+                        str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for one_stc in sel1.cpu().numpy()]
+                        stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                        sudo_heads_pred_1 = np.array([[one_w.pred_parent_id for one_w in stc]+[0 for _ in range(sel1.shape[1]-len(stc))] for stc in stc_pred_1])
+                ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2 = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1)  #sudo_heads_pred_1 TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
                 optim_bia_rl.zero_grad()
                 ls_rl_bh.backward()
                 optim_bia_rl.step()
                 ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh
-                ls = ls.cpu().detach().numpy()
-                ls_0_ep += ls
-                ls_3party = ls_3party.cpu().detach().numpy()
-                ls_1_ep += ls_3party
-        if False:
-            print('ls_rl_ep: ', ls_rl_ep)
-            print('ls_0_ep: ', ls_0_ep)
-            print('ls_1_ep: ', ls_1_ep)
-            print('r_bleu: ', r_bleu)
-            print('r_bleu_3party: ', r_bleu_3party)
+                ls1 = ls1.cpu().detach().numpy()
+                ls_1_ep += ls1
+                rewards_ave1_ep += rewards_ave1
+                ls2 = ls2.cpu().detach().numpy()
+                ls_2_ep += ls2
+                rewards_ave2_ep += rewards_ave2
+        if True:
+            print('train ls_rl_ep: ', ls_rl_ep)
+            print('train ls_1_ep: ', ls_1_ep)
+            print('train ls_2_ep: ', ls_2_ep)
+            print('train rewards_ave1_ep: ', rewards_ave1_ep)
+            print('train rewards_ave2_ep: ', rewards_ave2_ep)
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= DECAY
 
@@ -741,60 +752,86 @@ def main():
         ####eval######
         seq2seq.eval()
         network.eval()
-        ls_rl_ep = ls_0_ep = ls_1_ep
+        ls_rl_ep = rewards_ave1_ep = ls_1_ep = rewards_ave2_ep = ls_2_ep = 0
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        pred_filename_test = 'tmp1/pred_test%d' % (epoch_i)
+        pred_filename_test = 'dumped/pred_test%d' % (epoch_i)
         pred_writer_test.start(pred_filename_test)
+
+        src_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+        src_filename_test = 'dumped/src_test%d' % (epoch_i)
+        src_writer_test.start(src_filename_test)
+
         nll = 0
         token_num = 0
-        for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):
+        kk = 0
+        for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
+            kk += 1
+            if kk > 10:  # TODO:8.9
+                break
             word, char, pos, heads, types, masks, lengths = batch
             inp = word  #, _ = seq2seq.add_noise(word, lengths)
             sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
             END_token = word_alphabet.instance2index['_END']
             end_position = torch.eq(sel, END_token).nonzero()
             masks_sel = torch.ones_like(sel, dtype=torch.float)
-            lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1] - 1)  # -1 TODO: because of end token in the end
+            lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
             if not len(end_position) == 0:
                 for ij in end_position:
-                    lengths_sel[ij[0]] = ij[1] + 1
-                    masks_sel[ij[0], ij[1] + 1:-1] = 0  # -1 TODO: because of end token in the end
+                    lengths_sel[ij[0]] = ij[1]
+                    masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
 
             with torch.no_grad():
                 heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
                                                 leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel, lengths_sel,
-                                                                              beam=1)  # beam=1 ?? it should be equal to M TODO:
-                sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel, lengths_sel,
-                                                                              beam=1)  # beam=1 ?? it should be equal to M TODO:
-            ls_rl_bh, ls, ls_3party, r_bleu, r_bleu_3party = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
+                if 'stackPtr0' in parser_select:
+                    sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
+                                                                                  lengths_sel,
+                                                                                  beam=1)  # beam=1 ?? it should be equal to M TODO:
+                if 'stackPtr1' in parser_select:
+                    sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
+                                                                                        lengths_sel,
+                                                                                        beam=1)  # beam=1 ?? it should be equal to M TODO:
+                elif 'bist' in parser_select:
+                    str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                               one_stc in sel.cpu().numpy()]
+                    stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                    sudo_heads_pred_1 = np.array(
+                        [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for stc
+                         in stc_pred_1])
+            ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                           golden_out=heads, mask_id=END_token,
                                                                           stc_length_out=lengths_sel,
                                                                           sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
 
             ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
             ls_rl_ep += ls_rl_bh
-            ls = ls.cpu().detach().numpy()
-            ls_0_ep += ls
-            ls_3party = ls_3party.cpu().detach().numpy()
-            ls_1_ep += ls_3party
+            ls1 = ls1.cpu().detach().numpy()
+            ls_1_ep += ls1
+            rewards_ave1_ep += rewards_ave1
+            ls2 = ls2.cpu().detach().numpy()
+            ls_2_ep += ls2
+            rewards_ave2_ep += rewards_ave2
             sel = sel.detach().cpu().numpy()
             lengths_sel = lengths_sel.detach().cpu().numpy()
+
             pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
+            src_writer_test.write_stc(word, lengths, symbolic_root=True)
+
 
             for i in range(len(lengths_sel)):
-                nll += sum(pb[1:lengths_sel[i]])
+                nll += sum(pb[i, 1:lengths_sel[i]])
             token_num += sum(lengths_sel)-len(lengths_sel)
         nll /= token_num
 
-        print('test ls_rl_ep: ', ls_rl_ep)
-        print('test ls_0_ep: ', ls_0_ep)
-        print('test ls_1_ep: ', ls_1_ep)
-        print('test r_bleu: ', r_bleu)
-        print('test r_bleu_3party: ', r_bleu_3party)
-        print('test Perplexity: ', math.exp(nll))
+        print('test ls_rl_ep: ', ls_rl_ep)  # de
+        print('test ls_1_ep: ', ls_1_ep)    # de
+        print('test ls_2_ep: ', ls_2_ep)    # de
+        print('test rewards_ave1_ep: ', rewards_ave1_ep)  #de
+        print('test rewards_ave2_ep: ', rewards_ave2_ep)  #de
+        print('test nll: ', nll)
 
         pred_writer_test.close()
+        src_writer_test.close()
 
 
 if __name__ == '__main__':

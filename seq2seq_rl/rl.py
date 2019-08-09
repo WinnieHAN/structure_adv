@@ -76,17 +76,18 @@ def get_reward(out, dec_out, length_out):
     # out = out.tolist()
     # dec_out = dec_out.tolist()
 
-    stc_dda = sum([1 if out[i]==dec_out[i] else 0 for i in range(1, length_out)])
+    stc_dda = sum([0 if out[i]==dec_out[i] else 1 for i in range(1, length_out)])
 
     return stc_dda
 
 
 class LossBiafRL(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super(LossBiafRL, self).__init__()
 
         self.bl = 0
         self.bn = 0
+        self.device = device
 
     def forward(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out, sudo_golden_out_1):
         # ls = 0
@@ -131,38 +132,40 @@ class LossBiafRL(nn.Module):
 
         for j in range(stc_length_seq):
             wgt1 = np.asarray([1 if j < stc_length_out[i] else 0 for i in range(batch)])
+            # ls1 += (- pb[:, j] *
+            #         torch.from_numpy(rewards).float().cuda() *
+            #         torch.from_numpy(wgt1.astype(float)).float().cuda()).sum()
             ls1 += (- pb[:, j] *
-                    torch.from_numpy(rewards).float().cuda() *
-                    torch.from_numpy(wgt1.astype(float)).float().cuda()).sum()
+                    torch.from_numpy(rewards).float().to(self.device) *
+                    torch.from_numpy(wgt1.astype(float)).float().to(self.device)).sum()
             cnt1 += np.sum(wgt1)
 
-            # wgt1 = wgt1.__and__(sel[:, j] != mask_id)  # vocab_size + 1
-
         ls1 /= cnt1
-        rewards_ave = np.average(rewards)
+        rewards_ave1 = np.average(rewards)
 
         # ########
-        # ls2 = 0
-        # cnt2 = 0
-        #
-        # batch = sel.shape[0]
-        # bleus2 = []
-        # for i in range(batch):  #batch
-        #     bleu = get_reward(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
-        #     bleus2.append(bleu)
-        # bleus2 = np.asarray(bleus2)
-        #
-        # wgt2 = np.asarray([1 for _ in range(batch)])
-        # for j in range(stc_length):
-        #     ls1 += (- pb[:, j] *
-        #            torch.from_numpy(bleus2).float().cuda() *
-        #            torch.from_numpy(wgt2.astype(float)).float().cuda()).sum()
-        #     cnt2 += np.sum(wgt2)
-        #
-        #     wgt2 = wgt2.__and__(sel[:, j] != mask_id)  # vocab_size + 1
-        #
-        # ls2 /= cnt2
-        # bleu2 = np.average(bleus2)
+        ls2 = 0
+        cnt2 = 0
+        stc_length_seq = sel.shape[1]
+        batch = sel.shape[0]
+        rewards = []
+        for i in range(batch):  #batch
+            reward = get_reward(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            rewards.append(reward)
+        rewards = np.asarray(rewards)
 
-        loss = -ls1# -ls2
-        return loss, loss, ls1, rewards_ave, rewards_ave #loss, ls, ls1, bleu, bleu1
+        for j in range(stc_length_seq):
+            wgt2 = np.asarray([1 if j < stc_length_out[i] else 0 for i in range(batch)])
+            # ls2 += (- pb[:, j] *
+            #         torch.from_numpy(rewards).float().cuda() *
+            #         torch.from_numpy(wgt2.astype(float)).float().cuda()).sum()
+            ls2 += (- pb[:, j] *
+                    torch.from_numpy(rewards).float().to(self.device) *
+                    torch.from_numpy(wgt2.astype(float)).float().to(self.device)).sum()
+            cnt2 += np.sum(wgt2)
+
+        ls2 /= cnt2
+        rewards_ave2 = np.average(rewards)
+
+        loss = ls1 + ls2
+        return loss, ls1, ls2, rewards_ave1, rewards_ave2 #loss, ls, ls1, bleu, bleu1

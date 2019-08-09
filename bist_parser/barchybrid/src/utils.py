@@ -111,6 +111,15 @@ def read_conll(fh, proj):
     print read, 'sentences read.'
 
 
+def list2entry(words, lengths):
+    for i in range(len(words)):
+        root = ConllEntry(0, '*root*', '*root*', 'ROOT-POS', 'ROOT-CPOS', '_', -1, 'rroot', '_', '_')
+        tokens = [root]
+        ws = words[i]
+        lens = lengths[i]
+        tokens = tokens + [ConllEntry(int(j), ws[j], '_', '_', '_', '_', -1, '_', '_', '_') for j in range(1, lens)]
+        yield tokens
+
 def write_conll(fn, conll_gen):
     with open(fn, 'w') as fh:
         for sentence in conll_gen:

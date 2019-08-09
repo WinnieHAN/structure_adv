@@ -1,5 +1,5 @@
 from dynet import *
-from utils import ParseForest, read_conll, write_conll
+from utils import ParseForest, read_conll, write_conll, list2entry
 from operator import itemgetter
 from itertools import chain
 import utils, time, random
@@ -216,7 +216,6 @@ class ArcHybridLSTM:
                 root.ivec = (self.word2lstm.expr() * root.ivec) + self.word2lstmbias.expr()
                 root.vec = tanh( root.ivec )
 
-
     def Predict(self, conll_path):
         with open(conll_path, 'r') as conllFP:
             for iSentence, sentence in enumerate(read_conll(conllFP, False)):
@@ -270,6 +269,60 @@ class ArcHybridLSTM:
 
                 renew_cg()
                 yield sentence
+
+    def predict_stcs(self, words, lengths):
+        for iSentence, sentence in enumerate(list2entry(words, lengths)):
+            self.Init()
+
+            conll_sentence = [entry for entry in sentence if isinstance(entry, utils.ConllEntry)]
+
+            conll_sentence = conll_sentence[1:] + [conll_sentence[0]]
+            self.getWordEmbeddings(conll_sentence, False)
+            stack = ParseForest([])
+            buf = ParseForest(conll_sentence)
+
+            for root in conll_sentence:
+                root.lstms = [root.vec for _ in xrange(self.nnvecs)]
+
+            hoffset = 1 if self.headFlag else 0
+
+            while not (len(buf) == 1 and len(stack) == 0):
+                scores = self.__evaluate(stack, buf, False)
+                best = max(chain(*scores), key = itemgetter(2) )
+
+                if best[1] == 2:
+                    stack.roots.append(buf.roots[0])
+                    del buf.roots[0]
+
+                elif best[1] == 0:
+                    child = stack.roots.pop()
+                    parent = buf.roots[0]
+
+                    child.pred_parent_id = parent.id
+                    child.pred_relation = best[0]
+
+                    bestOp = 0
+                    if self.rlMostFlag:
+                        parent.lstms[bestOp + hoffset] = child.lstms[bestOp + hoffset]
+                    if self.rlFlag:
+                        parent.lstms[bestOp + hoffset] = child.vec
+
+                elif best[1] == 1:
+                    child = stack.roots.pop()
+                    parent = stack.roots[-1]
+
+                    child.pred_parent_id = parent.id
+                    child.pred_relation = best[0]
+
+                    bestOp = 1
+                    if self.rlMostFlag:
+                        parent.lstms[bestOp + hoffset] = child.lstms[bestOp + hoffset]
+                    if self.rlFlag:
+                        parent.lstms[bestOp + hoffset] = child.vec
+
+            renew_cg()
+            yield sentence
+
 
 
     def Train(self, conll_path):

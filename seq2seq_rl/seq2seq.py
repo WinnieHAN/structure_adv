@@ -6,7 +6,7 @@ import math
 
 
 class Seq2seq_Model(nn.Module):
-    def __init__(self, EMB=8, HID=64, DPr=0.5, vocab_size=None, word_embedd=None):
+    def __init__(self, EMB=8, HID=64, DPr=0.5, vocab_size=None, word_embedd=None, device=None):
         super(Seq2seq_Model, self).__init__()
 
         self.vocab_size = vocab_size
@@ -14,6 +14,7 @@ class Seq2seq_Model(nn.Module):
         self.HID = HID
         self.DP = nn.Dropout(DPr)
         self.num_layers = 3
+        self.device = device
 
         self.emb = word_embedd  # nn.Embedding(self.vocab_size + 2, self.EMB)
 
@@ -66,8 +67,8 @@ class Seq2seq_Model(nn.Module):
             return out
 
         else:
-            dec_inp = torch.ones((inp.shape[0], 1)).long().cuda() * 2  # id of start: self.vocab_size # START [50,1]
-
+            # dec_inp = torch.ones((inp.shape[0], 1)).long().cuda() * 2  # id of start: self.vocab_size # START [50,1]
+            dec_inp = torch.ones((inp.shape[0], 1)).long().to(self.device) * 2  # id of start: self.vocab_size # START [50,1]
             if is_tr == True:
                 if self.isLSTM:
                     h = (torch.cat([h[0] for _ in range(M)], dim=1), torch.cat([h[1] for _ in range(M)], dim=1))  # (1, 200, 128)
@@ -114,7 +115,7 @@ class Seq2seq_Model(nn.Module):
         """
         Randomly blank input words.
         """
-        word_blank = 0
+        word_blank = 0.1
         blank_index = 0  # should be defined TODO:
         pad_index = 0  # should be defined TODO:
         # define words to blank
