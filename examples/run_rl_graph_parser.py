@@ -100,6 +100,10 @@ def main():
 
     logger = get_logger("GraphParser")
 
+    SEED = 0
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed(SEED)
+
     mode = args.mode
     obj = args.objective
     decoding = args.decode
@@ -141,8 +145,7 @@ def main():
     use_pos = args.pos
     pos_dim = args.pos_dim
     word_dict, word_dim = utils.load_embedding_dict(word_embedding, word_path)
-    # word_dict = {}  # debug hanwj
-    # word_dim = 8  # debug hanwj
+
     char_dict = None
     char_dim = args.char_dim
     if char_embedding != 'random':
@@ -563,7 +566,7 @@ def main():
 
     # Pretrain seq2seq model using denoising autoencoder. model name: seq2seq model
     print('Pretrain seq2seq model using denoising autoencoder.')
-    EPOCHS = 10  # 150
+    EPOCHS = 0  # 150
     DECAY = 0.97
     shared_word_embedd = network.return_word_embedd()
     shared_word_embedd.weight.requires_grad = False
@@ -574,9 +577,9 @@ def main():
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     optim_seq2seq = torch.optim.Adam(seq2seq.parameters(), lr=0.0002)
 
-    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(1) + '.pt'))  # TODO: 7.13
+    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(69) + '.pt'))  # TODO: 7.13
     seq2seq.to(device)
-    network.load_state_dict(torch.load(args.network_load_path + str(1) + '.pt'))  # TODO: 7.13
+    network.load_state_dict(torch.load(args.network_load_path + str(69) + '.pt'))  # TODO: 7.13
     network.to(device)
 
     for i in range(EPOCHS):
@@ -655,7 +658,7 @@ def main():
     # Train seq2seq model using rl with reward of biaffine. model name: seq2seq model
     print('Train seq2seq model using rl with reward of biaffine.')
 
-
+    batch_size = 10
     # import third_party_parser
     sudo_golden_parser = third_party_parser(device, word_table, char_table, 0)
     sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, 1)
@@ -677,8 +680,8 @@ def main():
     EPOCHS = 100  # 80
     DECAY = 0.97
     M = 1  # this is the size of beam searching ?
-    optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=1e-4)  #0.00005
-    loss_biaf_rl = LossBiafRL(device=device).to(device)
+    optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=1e-4)  #1e-5 0.00005
+    loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet).to(device)
 
     # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(110) + '.pt'))  # TODO: 7.13
     # seq2seq.to(device)
@@ -693,7 +696,8 @@ def main():
         network.eval()  # only train seq2seq
         seq2seq.train()
         seq2seq.emb.weight.requires_grad = True
-        num_batches = 50   # TODO:8.9
+        num_batches = 200   # TODO:8.9
+        print('num_batches: ', str(num_batches))
         for _ in range(1, num_batches + 1): #num_batches
             # train_rl
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
@@ -724,7 +728,9 @@ def main():
                         str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for one_stc in sel1.cpu().numpy()]
                         stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
                         sudo_heads_pred_1 = np.array([[one_w.pred_parent_id for one_w in stc]+[0 for _ in range(sel1.shape[1]-len(stc))] for stc in stc_pred_1])
-                ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2 = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token, stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1)  #sudo_heads_pred_1 TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2 = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token,
+                                                                              stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1,
+                                                                              ori_words=word, ori_words_length=lengths)  #sudo_heads_pred_1 TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
                 optim_bia_rl.zero_grad()
                 ls_rl_bh.backward()
                 optim_bia_rl.step()
@@ -801,7 +807,12 @@ def main():
             ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                           golden_out=heads, mask_id=END_token,
                                                                           stc_length_out=lengths_sel,
-                                                                          sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                                                                          sudo_golden_out=sudo_heads_pred,
+                                                                          sudo_golden_out_1=sudo_heads_pred_1,
+                                                                          ori_words=word,
+                                                                          ori_words_length=lengths
+                                                                          )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+
 
             ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
             ls_rl_ep += ls_rl_bh

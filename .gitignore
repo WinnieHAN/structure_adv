@@ -1,3 +1,7 @@
+cands.txt
+log
+refs.txt
+temp.txt
 bist_parser/pretrained/
 bist_parser/sskip.100.vectors
 bist_parser/output/
