@@ -100,9 +100,9 @@ def main():
 
     logger = get_logger("GraphParser")
 
-    SEED = 0
-    torch.manual_seed(SEED)
-    torch.cuda.manual_seed(SEED)
+    # SEED = 0
+    # torch.manual_seed(SEED)
+    # torch.cuda.manual_seed(SEED)
 
     mode = args.mode
     obj = args.objective
@@ -168,7 +168,7 @@ def main():
     logger.info("Type Alphabet Size: %d" % num_types)
 
     logger.info("Reading Data")
-    device = torch.device('cuda:0') #torch.device('cpu') #torch.device('cuda:0') if args.cuda else torch.device('cpu') #TODO:8.8
+    device = torch.device('cuda:0')  #torch.device('cuda:0') if args.cuda else torch.device('cpu') #TODO:8.8
 
     data_train = conllx_data.read_data_to_tensor(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet, symbolic_root=True, device=device)
     # data_train = conllx_data.read_data(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
@@ -577,10 +577,10 @@ def main():
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     optim_seq2seq = torch.optim.Adam(seq2seq.parameters(), lr=0.0002)
 
-    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(69) + '.pt'))  # TODO: 7.13
-    seq2seq.to(device)
-    network.load_state_dict(torch.load(args.network_load_path + str(69) + '.pt'))  # TODO: 7.13
-    network.to(device)
+    # seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))  # TODO: 7.13
+    # seq2seq.to(device)
+    # network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))  # TODO: 7.13
+    # network.to(device)
 
     for i in range(EPOCHS):
         ls_seq2seq_ep = 0
@@ -593,13 +593,13 @@ def main():
                                                                                          unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
             inp, _ = seq2seq.add_noise(word, lengths)
             dec_out = word
-            wgt = masks
             dec_inp = torch.cat((word[:,0:1], word[:,0:-1]), dim=1)  # maybe wrong
             # train_seq2seq
             out = seq2seq(inp.long().to(device), is_tr=True, dec_inp=dec_inp.long().to(device))
 
             out = out.view((out.shape[0] * out.shape[1], out.shape[2]))
             dec_out = dec_out.view((dec_out.shape[0] * dec_out.shape[1],))
+            wgt = seq2seq.add_stop_token(masks, lengths)
             wgt = wgt.view((wgt.shape[0] * wgt.shape[1],)).float().to(device)
 
             ls_seq2seq_bh = loss_seq2seq(out, dec_out.long().to(device))
@@ -622,12 +622,11 @@ def main():
             bleu_ep = 0
             acc_numerator_ep = 0
             acc_denominator_ep = 0
-            # for _ in range(1, num_batches + 1):
-            #     word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_dev, batch_size,
-            #                                                                                  unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
-            for batch in conllx_data.iterate_batch_tensor(data_dev, batch_size):
+            testi = 0
+            for batch in conllx_data.iterate_batch_tensor(data_dev, batch_size):   # for _ in range(1, num_batches + 1):  word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_dev, batch_size, unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
                 word, char, pos, heads, types, masks, lengths = batch
-                inp, _ = seq2seq.add_noise(word, lengths)
+                inp = word
+                # inp, _ = seq2seq.add_noise(word, lengths)
                 dec_out = word
                 sel, _ = seq2seq(inp.long().to(device), LEN=inp.size()[1])
                 sel = sel.detach().cpu().numpy()
@@ -639,11 +638,12 @@ def main():
                     bleus.append(bleu)
                     numerator, denominator = get_correct(sel[j], dec_out[j], lengths[j])
                     acc_numerator_ep += numerator
-                    # print(acc_numerator_ep)
                     acc_denominator_ep += denominator.detach().cpu().numpy()
                 bleu_bh = np.average(bleus)
                 bleu_ep += bleu_bh
-            bleu_ep /= num_batches
+                testi += 1
+            bleu_ep /= testi  #num_batches
+            print('testi: ', testi)
             print('Valid bleu: %.4f%%' % (bleu_ep * 100))
             # print(acc_denominator_ep)
             print('Valid acc: %.4f%%' % ((acc_numerator_ep*1.0/acc_denominator_ep) * 100))
@@ -658,7 +658,6 @@ def main():
     # Train seq2seq model using rl with reward of biaffine. model name: seq2seq model
     print('Train seq2seq model using rl with reward of biaffine.')
 
-    batch_size = 10
     # import third_party_parser
     sudo_golden_parser = third_party_parser(device, word_table, char_table, 0)
     sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, 1)
@@ -677,11 +676,11 @@ def main():
     bist_parser = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
     bist_parser.Load(model)
 
-    EPOCHS = 100  # 80
+    EPOCHS = 20  # 80
     DECAY = 0.97
     M = 1  # this is the size of beam searching ?
-    optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=1e-4)  #1e-5 0.00005
-    loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet).to(device)
+    optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=1e-5)  #1e-5 0.00005
+    loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words).to(device)
 
     # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(110) + '.pt'))  # TODO: 7.13
     # seq2seq.to(device)
@@ -695,8 +694,10 @@ def main():
         ls_rl_ep = ls_1_ep = ls_2_ep = rewards_ave1_ep = rewards_ave2_ep = 0
         network.eval()  # only train seq2seq
         seq2seq.train()
-        seq2seq.emb.weight.requires_grad = True
-        num_batches = 200   # TODO:8.9
+        seq2seq.emb.weight.requires_grad = False
+        END_token = word_alphabet.instance2index['_PAD']  # word_alphabet.get_instance('_PAD)==1  '_END'==3
+        # num_batches = 200   # TODO:8.9
+        batch_size = 10
         print('num_batches: ', str(num_batches))
         for _ in range(1, num_batches + 1): #num_batches
             # train_rl
@@ -704,20 +705,31 @@ def main():
             inp = word
             if True:  #inp.size()[1]<15:#True:  #inp.size()[1]<15: #TODO: debug hanwj
                 decode = network.decode_mst
-                END_token = word_alphabet.instance2index['_END']  # ==1
                 _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
                 sel1 = sel.data.detach()
-                end_position = torch.eq(sel1, END_token).nonzero()
+                try:
+                    end_position = torch.eq(sel1, END_token).nonzero()
+                except RuntimeError:
+                    print(sel1)
+                    continue
                 masks_sel = torch.ones_like(sel1, dtype=torch.float)
                 lengths_sel = torch.ones_like(lengths).fill_(sel1.shape[1])  #sel1.shape[1]-1 TODO: because of end token in the end
                 if not len(end_position)==0:
+                    ij_back = -1
                     for ij in end_position:
-                        lengths_sel[ij[0]] = ij[1]
-                        masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                        if not (ij[0]==ij_back):
+                            lengths_sel[ij[0]] = ij[1]
+                            masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                            ij_back = ij[0]
 
                 with torch.no_grad():
-                    heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
+                    try:
+                        heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
                                                         leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                    except:
+                        print('IndexError Maybe: ', sel.data.cpu.numpy())
+                        print(masks_sel)
+                        continue
                     if 'stackPtr0' in parser_select:
                         sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel, lengths_sel,
                                                                                   beam=1)  # beam=1 ?? it should be equal to M TODO:
@@ -777,15 +789,16 @@ def main():
             word, char, pos, heads, types, masks, lengths = batch
             inp = word  #, _ = seq2seq.add_noise(word, lengths)
             sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
-            END_token = word_alphabet.instance2index['_END']
             end_position = torch.eq(sel, END_token).nonzero()
             masks_sel = torch.ones_like(sel, dtype=torch.float)
             lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
             if not len(end_position) == 0:
+                ij_back = -1
                 for ij in end_position:
-                    lengths_sel[ij[0]] = ij[1]
-                    masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
-
+                    if not (ij[0]==ij_back):
+                        lengths_sel[ij[0]] = ij[1]
+                        masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                        ij_back = ij[0]
             with torch.no_grad():
                 heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
                                                 leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)

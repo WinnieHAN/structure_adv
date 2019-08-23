@@ -12,14 +12,14 @@ import torch, os, codecs
 def get_bleu(out, dec_out, vocab_size):
     out = out.tolist()
     dec_out = dec_out.tolist()
-
-    if vocab_size + 1 in out:
-        cnd = out[:out.index(vocab_size + 1)]
+    stop_token = 1
+    if stop_token in out:
+        cnd = out[:out.index(stop_token)]
     else:
         cnd = out
 
-    if vocab_size + 1 in dec_out:
-        ref = [dec_out[:dec_out.index(vocab_size + 1)]]
+    if stop_token in dec_out:
+        ref = [dec_out[:dec_out.index(stop_token)]]
     else:
         ref = [dec_out]
 
@@ -60,8 +60,8 @@ class LossRL(nn.Module):
                    torch.from_numpy(bleus - self.bl).float().cuda() *
                    torch.from_numpy(wgt.astype(float)).float().cuda()).sum()
             cnt += np.sum(wgt)
-
-            wgt = wgt.__and__(sel[:, j] != vocab_size + 1)
+            stop_token = 1
+            wgt = wgt.__and__(sel[:, j] != stop_token)  # vocab_size + 1
 
         ls /= cnt
 
@@ -73,19 +73,20 @@ class LossRL(nn.Module):
 
 
 class LossBiafRL(nn.Module):
-    def __init__(self, device, word_alphabet):
+    def __init__(self, device, word_alphabet, vocab_size):
         super(LossBiafRL, self).__init__()
 
         self.bl = 0
         self.bn = 0
         self.device = device
         self.word_alphabet = word_alphabet
+        self.vocab_size = vocab_size
 
     def get_reward(self, out, dec_out, length_out, ori_words, ori_words_length):
         # out = out.tolist()
         # dec_out = dec_out.tolist()
         # word_alphabet.get_instance(one_word).encode('utf-8')
-        reward = 0
+        # reward = 0
         stc_dda = sum([0 if out[i] == dec_out[i] else 1 for i in range(1, length_out)])
 
         reward = stc_dda
@@ -196,7 +197,15 @@ class LossBiafRL(nn.Module):
         self.write_text(ori_words, ori_words_length, sel, stc_length_out)
         os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bert_score.py')
         meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')
-        rewards = meaning_preservation * 5  # affect more
+        rewards = meaning_preservation  # affect more
+
+        bleus_w = []
+        for i in range(batch):
+            bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
+
+            bleus_w.append(bleu)
+        bleus_w = np.asarray(bleus_w)
+        # rewards = rewards + bleus_w
 
         for j in range(stc_length_seq):
             wgt3 = np.asarray([1 if j < stc_length_out[i] else 0 for i in range(batch)])
@@ -209,5 +218,6 @@ class LossBiafRL(nn.Module):
         rewards_ave3 = np.average(rewards)
 
 
-        loss = ls3  #ls1 + ls2 + ls3
+        loss = ls3 #(ls1 + ls2)*0.01 + ls3
+        # loss = ls1
         return loss, ls1, ls3, rewards_ave1, rewards_ave3 #loss, ls, ls1, bleu, bleu1
