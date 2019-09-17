@@ -575,12 +575,13 @@ def main():
     print(seq2seq)
 
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
-    optim_seq2seq = torch.optim.Adam(seq2seq.parameters(), lr=0.0002)
+    parameters_need_update = filter(lambda p: p.requires_grad, seq2seq.parameters())
+    optim_seq2seq = torch.optim.Adam(parameters_need_update, lr=0.0002)
 
-    # seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))  # TODO: 7.13
-    # seq2seq.to(device)
-    # network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))  # TODO: 7.13
-    # network.to(device)
+    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))  # TODO: 7.13
+    seq2seq.to(device)
+    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))  # TODO: 7.13
+    network.to(device)
 
     for i in range(EPOCHS):
         ls_seq2seq_ep = 0
@@ -636,7 +637,7 @@ def main():
                 for j in range(sel.shape[0]):
                     bleu = get_bleu(sel[j], dec_out[j], num_words)  # sel
                     bleus.append(bleu)
-                    numerator, denominator = get_correct(sel[j], dec_out[j], lengths[j])
+                    numerator, denominator = get_correct(sel[j], dec_out[j], num_words)
                     acc_numerator_ep += numerator
                     acc_denominator_ep += denominator.detach().cpu().numpy()
                 bleu_bh = np.average(bleus)
@@ -679,7 +680,9 @@ def main():
     EPOCHS = 20  # 80
     DECAY = 0.97
     M = 1  # this is the size of beam searching ?
-    optim_bia_rl = torch.optim.Adam(seq2seq.parameters(), lr=1e-5)  #1e-5 0.00005
+    seq2seq.emb.weight.requires_grad = False
+    parameters_need_update = filter(lambda p: p.requires_grad, seq2seq.parameters())
+    optim_bia_rl = torch.optim.Adam(parameters_need_update, lr=1e-5)  #1e-5 0.00005
     loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words).to(device)
 
     # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(110) + '.pt'))  # TODO: 7.13
@@ -691,12 +694,12 @@ def main():
 
     for epoch_i in range(EPOCHS):
         print('======='+str(epoch_i)+'=========')
-        ls_rl_ep = ls_1_ep = ls_2_ep = rewards_ave1_ep = rewards_ave2_ep = 0
+        ls_rl_ep = ls_1_ep = ls_2_ep = rewards_ave1_ep = rewards_ave2_ep = ppl = 0
         network.eval()  # only train seq2seq
         seq2seq.train()
         seq2seq.emb.weight.requires_grad = False
         END_token = word_alphabet.instance2index['_PAD']  # word_alphabet.get_instance('_PAD)==1  '_END'==3
-        # num_batches = 200   # TODO:8.9
+        # num_batches = 100   # TODO:8.9
         batch_size = 10
         print('num_batches: ', str(num_batches))
         for _ in range(1, num_batches + 1): #num_batches
@@ -710,8 +713,8 @@ def main():
                 try:
                     end_position = torch.eq(sel1, END_token).nonzero()
                 except RuntimeError:
-                    print(sel1)
                     continue
+                    print(sel1)
                 masks_sel = torch.ones_like(sel1, dtype=torch.float)
                 lengths_sel = torch.ones_like(lengths).fill_(sel1.shape[1])  #sel1.shape[1]-1 TODO: because of end token in the end
                 if not len(end_position)==0:
@@ -724,10 +727,11 @@ def main():
 
                 with torch.no_grad():
                     try:
-                        heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
+                        heads_pred, types_pred = decode(sel1, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
                                                         leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                     except:
-                        print('IndexError Maybe: ', sel.data.cpu.numpy())
+                        print('IndexError Maybe sel1: ', sel1)
+                        print('IndexError Maybe: ', sel1.data.cpu().numpy())
                         print(masks_sel)
                         continue
                     if 'stackPtr0' in parser_select:
@@ -740,7 +744,7 @@ def main():
                         str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for one_stc in sel1.cpu().numpy()]
                         stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
                         sudo_heads_pred_1 = np.array([[one_w.pred_parent_id for one_w in stc]+[0 for _ in range(sel1.shape[1]-len(stc))] for stc in stc_pred_1])
-                ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2 = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token,
+                ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2, logppl = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token,
                                                                               stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1,
                                                                               ori_words=word, ori_words_length=lengths)  #sudo_heads_pred_1 TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
                 optim_bia_rl.zero_grad()
@@ -748,18 +752,20 @@ def main():
                 optim_bia_rl.step()
                 ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh
-                ls1 = ls1.cpu().detach().numpy()
+                # ls1 = ls1.cpu().detach().numpy()
                 ls_1_ep += ls1
                 rewards_ave1_ep += rewards_ave1
-                ls2 = ls2.cpu().detach().numpy()
+                # ls2 = ls2.cpu().detach().numpy()
                 ls_2_ep += ls2
                 rewards_ave2_ep += rewards_ave2
+                ppl = ppl + logppl
         if True:
             print('train ls_rl_ep: ', ls_rl_ep)
             print('train ls_1_ep: ', ls_1_ep)
             print('train ls_2_ep: ', ls_2_ep)
             print('train rewards_ave1_ep: ', rewards_ave1_ep)
             print('train rewards_ave2_ep: ', rewards_ave2_ep)
+            print('train ppl: ', np.exp(ppl/num_batches))
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= DECAY
 
@@ -770,7 +776,7 @@ def main():
         ####eval######
         seq2seq.eval()
         network.eval()
-        ls_rl_ep = rewards_ave1_ep = ls_1_ep = rewards_ave2_ep = ls_2_ep = 0
+        ls_rl_ep = rewards_ave1_ep = ls_1_ep = rewards_ave2_ep = ls_2_ep = ppl = 0
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
         pred_filename_test = 'dumped/pred_test%d' % (epoch_i)
         pred_writer_test.start(pred_filename_test)
@@ -817,7 +823,7 @@ def main():
                     sudo_heads_pred_1 = np.array(
                         [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for stc
                          in stc_pred_1])
-            ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
+            ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2, logppl = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                           golden_out=heads, mask_id=END_token,
                                                                           stc_length_out=lengths_sel,
                                                                           sudo_golden_out=sudo_heads_pred,
@@ -829,15 +835,15 @@ def main():
 
             ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
             ls_rl_ep += ls_rl_bh
-            ls1 = ls1.cpu().detach().numpy()
+            # ls1 = ls1.cpu().detach().numpy()
             ls_1_ep += ls1
             rewards_ave1_ep += rewards_ave1
-            ls2 = ls2.cpu().detach().numpy()
+            # ls2 = ls2.cpu().detach().numpy()
             ls_2_ep += ls2
             rewards_ave2_ep += rewards_ave2
             sel = sel.detach().cpu().numpy()
             lengths_sel = lengths_sel.detach().cpu().numpy()
-
+            ppl = ppl + logppl
             pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
             src_writer_test.write_stc(word, lengths, symbolic_root=True)
 
@@ -853,6 +859,7 @@ def main():
         print('test rewards_ave1_ep: ', rewards_ave1_ep)  #de
         print('test rewards_ave2_ep: ', rewards_ave2_ep)  #de
         print('test nll: ', nll)
+        print('test ppl: ', np.exp(ppl / num_batches))
 
         pred_writer_test.close()
         src_writer_test.close()
