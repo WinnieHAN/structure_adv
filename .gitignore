@@ -1,3 +1,7 @@
+base_attach/adv_sentences.txt
+base_attach/ori_sentences.txt
+output.txt
+*.npy
 temp_ppl.txt
 cands.txt
 log
