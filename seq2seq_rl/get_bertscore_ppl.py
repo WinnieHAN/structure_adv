@@ -23,7 +23,7 @@ P,R,F = score(cands, refs, model_type='bert-base-uncased', verbose=False)
 
 np.savetxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt',F.cpu().numpy())
 end = time.time()
-print('bert score: ' + str(end-start))
+# print('bert score: ' + str(end-start))
 # ===============ppl===============================
 
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer
@@ -55,4 +55,4 @@ with torch.no_grad():
     # print(ppls)
     np.savetxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt', np.array(ppls))
 end = time.time()
-print('ppl score: ' + str(end-start))
+# print('ppl score: ' + str(end-start))

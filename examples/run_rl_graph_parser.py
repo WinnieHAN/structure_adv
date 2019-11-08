@@ -711,7 +711,7 @@ def main():
 
     for epoch_i in range(EPOCHS):
         print('======='+str(epoch_i)+'=========')
-        ls_rl_ep = ls_1_ep = ls_2_ep = rewards_ave1_ep = rewards_ave2_ep = ppl = 0
+        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
         network.eval()  # only train seq2seq
         seq2seq.train()
         seq2seq.emb.weight.requires_grad = False
@@ -721,7 +721,7 @@ def main():
             batch_size = 10
         elif args.treebank == 'ctb':
             batch_size = 1
-        num_batches = 0
+        # num_batches = 0
         print('num_batches: ', str(num_batches))
         for kkk in range(1, num_batches + 1): #num_batches
             # print('---'+str(kkk)+'---')
@@ -766,7 +766,7 @@ def main():
                         str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for one_stc in sel1.cpu().numpy()]
                         stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
                         sudo_heads_pred_1 = np.array([[one_w.pred_parent_id for one_w in stc]+[0 for _ in range(sel1.shape[1]-len(stc))] for stc in stc_pred_1])
-                ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2, logppl = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token,
+                ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred, golden_out=heads, mask_id=END_token,
                                                                               stc_length_out=lengths_sel, sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1,
                                                                               ori_words=word, ori_words_length=lengths)  #sudo_heads_pred_1 TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
                 optim_bia_rl.zero_grad()
@@ -775,19 +775,18 @@ def main():
                 ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh
                 # ls1 = ls1.cpu().detach().numpy()
-                ls_1_ep += ls1
-                rewards_ave1_ep += rewards_ave1
-                # ls2 = ls2.cpu().detach().numpy()
-                ls_2_ep += ls2
-                rewards_ave2_ep += rewards_ave2
-                ppl = ppl + logppl
-        if False:
-            print('train ls: ', ls_rl_ep)
-            print('train reward parser b: ', ls_1_ep)
-            print('train reward parser c: ', ls_2_ep)
-            print('train reward meaning: ', rewards_ave1_ep)
-            print('train reward ppl: ', rewards_ave2_ep)
-            print('train logppl: ', np.exp(ppl/num_batches))
+                rewards1 += reward1
+                rewards2 += reward2
+                rewards3 += reward3
+                rewards4 += reward4
+                rewards5 += reward5
+        if True:
+            print('train loss: ', ls_rl_ep)
+            print('train reward parser b: ', rewards1)
+            print('train reward parser c: ', rewards2)
+            print('train reward parser b^c: ', rewards3)
+            print('train reward meaning: ', rewards4)
+            print('train reward fluency: ', rewards5)
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= DECAY
 
@@ -798,7 +797,7 @@ def main():
         ####eval######
         seq2seq.eval()
         network.eval()
-        ls_rl_ep = rewards_ave1_ep = ls_1_ep = rewards_ave2_ep = ls_2_ep = ppl = 0
+        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
         if args.treebank == 'ptb':
             pred_filename_test = 'dumped/pred_test%d' % (epoch_i)
@@ -853,7 +852,7 @@ def main():
                     sudo_heads_pred_1 = np.array(
                         [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for stc
                          in stc_pred_1])
-            ls_rl_bh, ls1, ls2, rewards_ave1, rewards_ave2, logppl = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
+            ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                           golden_out=heads, mask_id=END_token,
                                                                           stc_length_out=lengths_sel,
                                                                           sudo_golden_out=sudo_heads_pred,
@@ -865,15 +864,13 @@ def main():
 
             ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
             ls_rl_ep += ls_rl_bh
-            # ls1 = ls1.cpu().detach().numpy()
-            ls_1_ep += ls1
-            rewards_ave1_ep += rewards_ave1
-            # ls2 = ls2.cpu().detach().numpy()
-            ls_2_ep += ls2
-            rewards_ave2_ep += rewards_ave2
+            rewards1 += reward1
+            rewards2 += reward2
+            rewards3 += reward3
+            rewards4 += reward4
+            rewards5 += reward5
             sel = sel.detach().cpu().numpy()
             lengths_sel = lengths_sel.detach().cpu().numpy()
-            ppl = ppl + logppl
             print(sel)
             pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
             src_writer_test.write_stc(word, lengths, symbolic_root=True)
@@ -884,13 +881,15 @@ def main():
             token_num += sum(lengths_sel)-len(lengths_sel)
         nll /= token_num
 
-        print('test ls: ', ls_rl_ep)  # de
-        print('test reward parser b: ', ls_1_ep)    # de
-        print('test reward parser c: ', ls_2_ep)    # de
-        print('reward meaning: ', rewards_ave1_ep)  #de
-        print('test train reward ppl: ', rewards_ave2_ep)  #de
+
+        print('test loss: ', ls_rl_ep)
+        print('test reward parser b: ', rewards1)
+        print('test reward parser c: ', rewards2)
+        print('test reward parser b^c: ', rewards3)
+        print('test reward meaning: ', rewards4)
+        print('test reward fluency: ', rewards5)
+
         print('test nll: ', nll)
-        print('test logppl: ', np.exp(ppl / num_batches))
 
         pred_writer_test.close()
         src_writer_test.close()

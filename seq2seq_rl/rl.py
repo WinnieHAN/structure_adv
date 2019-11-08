@@ -253,8 +253,15 @@ class LossBiafRL(nn.Module):
         self.word_alphabet = word_alphabet
         self.vocab_size = vocab_size
 
-    def get_reward(self, out, dec_out, length_out, ori_words, ori_words_length):
+    def get_reward_diff(self, out, dec_out, length_out, ori_words, ori_words_length):
         stc_dda = sum([0 if out[i] == dec_out[i] else 1 for i in range(1, length_out)])
+
+        reward = stc_dda
+
+        return reward
+
+    def get_reward_same(self, out, dec_out, length_out, ori_words, ori_words_length):
+        stc_dda = sum([1 if out[i] == dec_out[i] else 0 for i in range(1, length_out)])
 
         reward = stc_dda
 
@@ -284,17 +291,25 @@ class LossBiafRL(nn.Module):
         batch = sel.shape[0]
         rewards_z1 = []
         for i in range(batch):  #batch
-            reward = self.get_reward(predicted_out[i], sudo_golden_out[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z1.append(reward)
         rewards_z1 = np.asarray(rewards_z1)
 
-        # ####2####
+        #####2####
         batch = sel.shape[0]
         rewards_z2 = []
         for i in range(batch):  #batch
-            reward = self.get_reward(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z2.append(reward)
         rewards_z2 = np.asarray(rewards_z2)
+
+        #####3####
+        batch = sel.shape[0]
+        rewards_z3 = []
+        for i in range(batch):  #batch
+            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            rewards_z3.append(reward)
+        rewards_z3 = np.asarray(rewards_z3)
 
         ####3#####add meaning_preservation as reward
         batch = sel.shape[0]
@@ -314,7 +329,7 @@ class LossBiafRL(nn.Module):
 
         #-----------------------------------------------
 
-        rewards = (meaning_preservation + ppl + rewards_z1 + rewards_z2)*0.001      #TODO  0.1# + bleus_w*5
+        rewards = (meaning_preservation + ppl + rewards_z1 + rewards_z2 + rewards_z3)*0.001      #TODO  0.1# + bleus_w*5
         # rewards = bleus_w * 10  # 8.26
 
         ls3 = 0
@@ -341,4 +356,4 @@ class LossBiafRL(nn.Module):
         # print('ppl: ', np.average(ppl))
 
         # loss = ls1
-        return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(meaning_preservation), np.average(ppl), np.average(logppl) #loss, ls, ls1, bleu, bleu1
+        return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(rewards_z3), np.average(meaning_preservation), np.average(ppl) #loss, ls, ls1, bleu, bleu1
