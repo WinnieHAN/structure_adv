@@ -27,6 +27,7 @@ UAS        |     91.70 |     91.70 |     91.70 |     91.70
 LAS        |     89.63 |     89.63 |     89.63 |     89.63
 WeightedLAS|     89.24 |     89.31 |     89.27 |     89.31
 
+Look at the final result in output/test_pred.conllu.txt
 
 # Dependency Parsing on Penn Treebank
 

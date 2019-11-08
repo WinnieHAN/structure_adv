@@ -8,6 +8,9 @@ Implementation of Bi-directional LSTM-CNNs-TreeCRF model for Graph-based depende
 import sys
 import os, math
 
+reload(sys)
+sys.setdefaultencoding('utf-8')   # Try setting the system default encoding as utf-8 at the start of the script, so that all strings are encoded using that. Or there will be UnicodeDecodeError: 'ascii' codec can't decode byte...
+
 sys.path.append(".")
 sys.path.append("..")
 
@@ -29,6 +32,8 @@ from neuronlp2.nn.utils import freeze_embedding
 from seq2seq_rl.seq2seq import Seq2seq_Model
 from seq2seq_rl.rl import LossRL, LossBiafRL, get_bleu, get_correct
 from stack_parser_eval import third_party_parser
+import pickle
+from bist_parser.barchybrid.src.arc_hybrid import ArcHybridLSTM
 
 uid = uuid.uuid4().hex[:6]
 
@@ -91,6 +96,7 @@ def main():
     args_parser.add_argument('--rl_finetune_seq2seq_load_path', default='models/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
     args_parser.add_argument('--rl_finetune_network_load_path', default='models/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
 
+    args_parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
 
     args = args_parser.parse_args()
 
@@ -168,7 +174,7 @@ def main():
     logger.info("Type Alphabet Size: %d" % num_types)
 
     logger.info("Reading Data")
-    device = torch.device('cuda:0')  #torch.device('cuda:0') if args.cuda else torch.device('cpu') #TODO:8.8
+    device = torch.device('cuda')  #torch.device('cuda:0') if args.cuda else torch.device('cpu') #TODO:8.8
 
     data_train = conllx_data.read_data_to_tensor(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet, symbolic_root=True, device=device)
     # data_train = conllx_data.read_data(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
@@ -324,7 +330,10 @@ def main():
     max_decay = 9
     double_schedule_decay = 5
     num_epochs = 0  # debug hanwj
-    network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))  # TODO: 7.13
+    if args.treebank == 'ptb':
+        network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))  # TODO: 10.7
+    elif args.treebank == 'ctb':
+        network.load_state_dict(torch.load('ctb_models/parsing/biaffine/network.pt'))  # TODO: 10.7
     network.to(device)
     for epoch in range(1, num_epochs + 1):
         print('Epoch %d (%s, optim: %s, learning rate=%.6f, eps=%.1e, decay rate=%.2f (schedule=%d, patient=%d, decay=%d)): ' % (epoch, mode, opt, lr, eps, decay_rate, schedule, patient, decay))
@@ -577,11 +586,16 @@ def main():
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     parameters_need_update = filter(lambda p: p.requires_grad, seq2seq.parameters())
     optim_seq2seq = torch.optim.Adam(parameters_need_update, lr=0.0002)
-
-    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))  # TODO: 7.13
-    seq2seq.to(device)
-    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))  # TODO: 7.13
-    network.to(device)
+    if args.treebank == 'ptb':
+        seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))  # TODO: 10.7
+        seq2seq.to(device)
+        network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))  # TODO: 10.7
+        network.to(device)
+    elif args.treebank == 'ctb':
+        seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(7) + '.pt'))  # TODO: 10.7
+        seq2seq.to(device)
+        network.load_state_dict(torch.load(args.network_load_path + str(7) + '.pt'))  # TODO: 10.7
+        network.to(device)
 
     for i in range(EPOCHS):
         ls_seq2seq_ep = 0
@@ -617,7 +631,7 @@ def main():
             pg['lr'] *= DECAY
 
         # test th bleu of seq2seq
-        if i%1 == 0:
+        if False: #i%1 == 0:
             seq2seq.eval()
             network.eval()
             bleu_ep = 0
@@ -639,7 +653,7 @@ def main():
                     bleus.append(bleu)
                     numerator, denominator = get_correct(sel[j], dec_out[j], num_words)
                     acc_numerator_ep += numerator
-                    acc_denominator_ep += denominator.detach().cpu().numpy()
+                    acc_denominator_ep += denominator #.detach().cpu().numpy() TODO: 10.8
                 bleu_bh = np.average(bleus)
                 bleu_ep += bleu_bh
                 testi += 1
@@ -653,23 +667,26 @@ def main():
             torch.save(seq2seq.state_dict(), args.seq2seq_save_path + str(i) + '.pt')
             torch.save(network.state_dict(), args.network_save_path + str(i) + '.pt')
     # Pretrain seq2seq model using token wise adv examples. model name: seq2seq model
-    print('Pretrain seq2seq model using token wise adv examples.')
-
+    # print('Pretrain seq2seq model using token wise adv examples.')
 
     # Train seq2seq model using rl with reward of biaffine. model name: seq2seq model
     print('Train seq2seq model using rl with reward of biaffine.')
 
     # import third_party_parser
-    sudo_golden_parser = third_party_parser(device, word_table, char_table, 0)
-    sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, 1)
+    sudo_golden_parser = third_party_parser(device, word_table, char_table, 0, args)
+    sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, 1, args)
     sudo_golden_parser.eval()
     sudo_golden_parser_1.eval()
 
-    import pickle
-    from bist_parser.barchybrid.src.arc_hybrid import ArcHybridLSTM
-    params = 'bist_parser/pretrained/model1/params.pickle'
-    external_embedding = 'bist_parser/sskip.100.vectors'
-    model = 'bist_parser/pretrained/model1/barchybrid.model30'
+
+    if args.treebank == 'ptb':
+        params = 'bist_parser/pretrained/model1/params.pickle'
+        external_embedding = 'bist_parser/sskip.100.vectors'
+        model = 'bist_parser/pretrained/model1/barchybrid.model30'
+    elif args.treebank == 'ctb':
+        params = 'bist_parser/ctb_output/params.pickle'
+        external_embedding = 'bist_parser/sskip.chn.50'
+        model = 'bist_parser/ctb_output/barchybrid.model30'
     with open(params, 'r') as paramsfp:
         words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
 
@@ -677,7 +694,7 @@ def main():
     bist_parser = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
     bist_parser.Load(model)
 
-    EPOCHS = 20  # 80
+    EPOCHS = 80 #0  # 80
     DECAY = 0.97
     M = 1  # this is the size of beam searching ?
     seq2seq.emb.weight.requires_grad = False
@@ -685,10 +702,10 @@ def main():
     optim_bia_rl = torch.optim.Adam(parameters_need_update, lr=1e-5)  #1e-5 0.00005
     loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words).to(device)
 
-    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(110) + '.pt'))  # TODO: 7.13
-    # seq2seq.to(device)
-    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(110) + '.pt'))  # TODO: 7.13
-    # network.to(device)
+    seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(4) + '.pt'))  # TODO: 7.13
+    seq2seq.to(device)
+    network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(4) + '.pt'))  # TODO: 7.13
+    network.to(device)
 
     parser_select = ['stackPtr0', 'bist']
 
@@ -700,9 +717,14 @@ def main():
         seq2seq.emb.weight.requires_grad = False
         END_token = word_alphabet.instance2index['_PAD']  # word_alphabet.get_instance('_PAD)==1  '_END'==3
         # num_batches = 100   # TODO:8.9
-        batch_size = 10
+        if args.treebank == 'ptb':
+            batch_size = 10
+        elif args.treebank == 'ctb':
+            batch_size = 1
+        num_batches = 0
         print('num_batches: ', str(num_batches))
-        for _ in range(1, num_batches + 1): #num_batches
+        for kkk in range(1, num_batches + 1): #num_batches
+            # print('---'+str(kkk)+'---')
             # train_rl
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
             inp = word
@@ -735,10 +757,10 @@ def main():
                         print(masks_sel)
                         continue
                     if 'stackPtr0' in parser_select:
-                        sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel, lengths_sel,
+                        sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel1, None, None, masks_sel, lengths_sel,
                                                                                   beam=1)  # beam=1 ?? it should be equal to M TODO:
                     if 'stackPtr1' in parser_select:
-                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel, lengths_sel,
+                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel1, None, None, masks_sel, lengths_sel,
                                                                                         beam=1)  # beam=1 ?? it should be equal to M TODO:
                     elif 'bist' in parser_select:
                         str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for one_stc in sel1.cpu().numpy()]
@@ -759,13 +781,13 @@ def main():
                 ls_2_ep += ls2
                 rewards_ave2_ep += rewards_ave2
                 ppl = ppl + logppl
-        if True:
-            print('train ls_rl_ep: ', ls_rl_ep)
-            print('train ls_1_ep: ', ls_1_ep)
-            print('train ls_2_ep: ', ls_2_ep)
-            print('train rewards_ave1_ep: ', rewards_ave1_ep)
-            print('train rewards_ave2_ep: ', rewards_ave2_ep)
-            print('train ppl: ', np.exp(ppl/num_batches))
+        if False:
+            print('train ls: ', ls_rl_ep)
+            print('train reward parser b: ', ls_1_ep)
+            print('train reward parser c: ', ls_2_ep)
+            print('train reward meaning: ', rewards_ave1_ep)
+            print('train reward ppl: ', rewards_ave2_ep)
+            print('train logppl: ', np.exp(ppl/num_batches))
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= DECAY
 
@@ -778,21 +800,29 @@ def main():
         network.eval()
         ls_rl_ep = rewards_ave1_ep = ls_1_ep = rewards_ave2_ep = ls_2_ep = ppl = 0
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        pred_filename_test = 'dumped/pred_test%d' % (epoch_i)
+        if args.treebank == 'ptb':
+            pred_filename_test = 'dumped/pred_test%d' % (epoch_i)
+            src_filename_test = 'dumped/src_test%d' % (epoch_i)
+        elif args.treebank == 'ctb':
+            src_filename_test = 'ctb_dumped/src_test%d' % (epoch_i)
+            pred_filename_test = 'ctb_dumped/pred_test%d' % (epoch_i)
+
         pred_writer_test.start(pred_filename_test)
 
         src_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        src_filename_test = 'dumped/src_test%d' % (epoch_i)
         src_writer_test.start(src_filename_test)
 
         nll = 0
         token_num = 0
         kk = 0
+        # batch_size_for_eval = 1
         for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
             kk += 1
-            if kk > 10:  # TODO:8.9
-                break
+            print('-------'+str(kk)+'-------')
+            # if kk > 10:  # TODO:8.9
+            #     break
             word, char, pos, heads, types, masks, lengths = batch
+            print(lengths)
             inp = word  #, _ = seq2seq.add_noise(word, lengths)
             sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
             end_position = torch.eq(sel, END_token).nonzero()
@@ -844,6 +874,7 @@ def main():
             sel = sel.detach().cpu().numpy()
             lengths_sel = lengths_sel.detach().cpu().numpy()
             ppl = ppl + logppl
+            print(sel)
             pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
             src_writer_test.write_stc(word, lengths, symbolic_root=True)
 
@@ -853,13 +884,13 @@ def main():
             token_num += sum(lengths_sel)-len(lengths_sel)
         nll /= token_num
 
-        print('test ls_rl_ep: ', ls_rl_ep)  # de
-        print('test ls_1_ep: ', ls_1_ep)    # de
-        print('test ls_2_ep: ', ls_2_ep)    # de
-        print('test rewards_ave1_ep: ', rewards_ave1_ep)  #de
-        print('test rewards_ave2_ep: ', rewards_ave2_ep)  #de
+        print('test ls: ', ls_rl_ep)  # de
+        print('test reward parser b: ', ls_1_ep)    # de
+        print('test reward parser c: ', ls_2_ep)    # de
+        print('reward meaning: ', rewards_ave1_ep)  #de
+        print('test train reward ppl: ', rewards_ave2_ep)  #de
         print('test nll: ', nll)
-        print('test ppl: ', np.exp(ppl / num_batches))
+        print('test logppl: ', np.exp(ppl / num_batches))
 
         pred_writer_test.close()
         src_writer_test.close()

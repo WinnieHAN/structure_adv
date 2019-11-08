@@ -1,3 +1,7 @@
+bist_parser/ctb_output/
+bist_parser/sskip.chn.50
+ctb_models/
+sskip.chn.50.gz
 base_attach/adv_sentences.txt
 base_attach/ori_sentences.txt
 output.txt

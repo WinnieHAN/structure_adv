@@ -32,13 +32,14 @@ uid = uuid.uuid4().hex[:6]
 
 
 class third_party_parser(nn.Module):
-    def __init__(self, device, word_table, char_table, model_id):
+    def __init__(self, device, word_table, char_table, model_id, args):
         super(third_party_parser, self).__init__()
         # mode = args.mode
-        if model_id==0:
+        # if model_id==0 and args.treebank == 'ptb':
+        if args.treebank == 'ptb':
             model_path = "models/parsing/stack_ptr/"  # args.model_path
-        elif model_id==1:
-            model_path = "models/parsing/stack_ptr/"  # args.model_path
+        elif args.treebank == 'ctb':
+            model_path = "ctb_models/parsing/stack_ptr/"  # args.model_path
         model_name = 'network.pt'  # args.model_name
 
         model_name = os.path.join(model_path, model_name)
@@ -48,9 +49,7 @@ class third_party_parser(nn.Module):
         # save_args()
         arg_path = model_name + '.arg.json'
         # json.dump({'args': arguments, 'kwargs': kwargs}, open(arg_path, 'w'), indent=4)
-        [word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters, window,
-        mode, input_size_decoder, hidden_size, encoder_layers, decoder_layers,
-        num_types, arc_space, type_space] = json.load(open(arg_path, "r"))['args']
+        [word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters, window, mode, input_size_decoder, hidden_size, encoder_layers, decoder_layers, num_types, arc_space, type_space] = json.load(open(arg_path, "r"))['args']
         parameters = json.load(open(arg_path, "r"))['kwargs']
         p_in = parameters['p_in']
         p_out = parameters['p_out']
