@@ -81,9 +81,8 @@ elif LANGUAGE_CODE is 'zh':
             s_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(s))
             s_tensor = torch.LongTensor([[101] + s_ids] * batch_size).to(device)
             mask = torch.ones(batch_size, s_tensor.shape[1]).to(device)
-            logits, past = decoder(s_tensor, mask, past=None, past_length=0)
-            probs = F.softmax(logits.squeeze() / 1.0, dim=-1)
-            log_ppl = get_log_ppl(logits, s_tensor.squeeze())
+            logits, _ = decoder(s_tensor, mask, past=None, past_length=0)
+            log_ppl = get_log_ppl(logits.squeeze(0), s_tensor.squeeze(0))
             ppls.append(log_ppl.cpu().numpy())
         np.savetxt('./temp_ppl.txt', np.array(ppls))
 else:
