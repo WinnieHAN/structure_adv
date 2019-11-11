@@ -8,6 +8,8 @@ import torch, os, codecs, math
 #
 # print('BLEU: %.4f%%' % (bleu * 100))
 
+#TODO(lwzhang) temporarily used hard code to sepcecify saved score file
+SCORE_PREFIX = 'task1_'
 
 def get_bleu(out, dec_out, vocab_size):
     out = out.tolist()
@@ -214,7 +216,7 @@ class LossBiafRL1(nn.Module):
         batch = sel.shape[0]
         self.write_text(ori_words, ori_words_length, sel, stc_length_out)
         os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bert_score.py')
-        meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')
+        meaning_preservation = np.loadtxt('temp.txt')
         rewards = meaning_preservation  # affect more
 
         bleus_w = []
@@ -315,8 +317,8 @@ class LossBiafRL(nn.Module):
         batch = sel.shape[0]
         self.write_text(ori_words, ori_words_length, sel, stc_length_out)
         os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
-        meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')*100
-        logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt') # * (-0.1)
+        meaning_preservation = np.loadtxt(SCORE_PREFIX + 'temp.txt')*100
+        logppl = np.loadtxt(SCORE_PREFIX + 'temp_ppl.txt') # * (-0.1)
         ppl = -np.exp(logppl) * 0.001
         # rewards = meaning_preservation * 10  # affect more
 

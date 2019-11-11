@@ -27,6 +27,11 @@ bist-parser/output/
 bist-parser/pretrained/
 bist-parser/sskip.100.vectors
 bist-parser/.idea/
+pretrained_model_bert/*
+pretrained_model_gpt/*
+pretrained_model_gpt2/*
+pretrained_model_bert_zh/*
+scripts/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

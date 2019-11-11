@@ -2,6 +2,8 @@ from bert_score import score
 import numpy as np
 
 LANGUAGE_CODE = 'en'
+#TODO(lwzhang) temporarily used hard code to sepcecify saved score file. Same with rl.py
+SCORE_PREFIX = 'task1_'
 
 # ===============bertscore===============================
 
@@ -16,7 +18,7 @@ with open("refs.txt") as f:
 # P, R, F = score(cands, refs, lang=LANGUAGE_CODE, verbose=False)
 # TODO(lwzhang) current score only support enlish
 P,R,F = score(cands, refs, model_type='bert-base-uncased', verbose=False)
-np.savetxt('./temp.txt', F.cpu().numpy())
+np.savetxt(SCORE_PREFIX + 'temp.txt', F.cpu().numpy())
 
 import torch
 
@@ -46,7 +48,7 @@ if LANGUAGE_CODE is 'en':
             ppls.append(loss.cpu().numpy())  # the small, the better
             # ppls.append(math.exp(loss.cpu().numpy()))  # the small, the better
         # print(ppls)
-        np.savetxt('./temp_ppl.txt', np.array(ppls))
+        np.savetxt(SCORE_PREFIX + 'temp_ppl.txt', np.array(ppls))
 elif LANGUAGE_CODE is 'zh':
     # =============== zh ppl ===============================
     # here is a GPT based ppl calculator for Chinese.
@@ -84,6 +86,6 @@ elif LANGUAGE_CODE is 'zh':
             logits, _ = decoder(s_tensor, mask, past=None, past_length=0)
             log_ppl = get_log_ppl(logits.squeeze(0), s_tensor.squeeze(0))
             ppls.append(log_ppl.cpu().numpy())
-        np.savetxt('./temp_ppl.txt', np.array(ppls))
+        np.savetxt(SCORE_PREFIX + 'temp_ppl.txt', np.array(ppls))
 else:
     print("Error Language Code!")
