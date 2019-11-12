@@ -3,7 +3,7 @@ import numpy as np
 
 LANGUAGE_CODE = 'en'
 #TODO(lwzhang) temporarily used hard code to sepcecify saved score file. Same with rl.py
-SCORE_PREFIX = 'task1_'
+SCORE_PREFIX = 'dir_check_'
 
 # ===============bertscore===============================
 

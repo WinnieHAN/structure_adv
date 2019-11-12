@@ -6,16 +6,17 @@ base_attach/adv_sentences.txt
 base_attach/ori_sentences.txt
 output.txt
 *.npy
-temp_ppl.txt
-cands.txt
+*temp_ppl.txt
+*cands.txt
 log
-refs.txt
-temp.txt
+*refs.txt
+*temp.txt
 bist_parser/pretrained/
 bist_parser/sskip.100.vectors
 bist_parser/output/
 dumped1
 dumped
+ctb_dumped
 tmp1/
 run.sh
 run1.sh
@@ -31,7 +32,7 @@ pretrained_model_bert/*
 pretrained_model_gpt/*
 pretrained_model_gpt2/*
 pretrained_model_bert_zh/*
-scripts/*
+scirpts/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
