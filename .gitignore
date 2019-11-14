@@ -33,6 +33,7 @@ pretrained_model_gpt/*
 pretrained_model_gpt2/*
 pretrained_model_bert_zh/*
 scirpts/*
+bert_score
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
