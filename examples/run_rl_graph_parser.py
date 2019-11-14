@@ -37,6 +37,9 @@ from bist_parser.barchybrid.src.arc_hybrid import ArcHybridLSTM
 
 uid = uuid.uuid4().hex[:6]
 
+#TODO(lwzhang) temporarily used hard code to sepcecify saved score file
+SCORE_PREFIX = 'node2_'
+
 # 3 sub-models should be pretrained in our approach
 #   seq2seq pretrain, denoising autoencoder  | or using token-wise adv to generate adv examples.
 #   structure prediction model
@@ -702,9 +705,9 @@ def main():
     optim_bia_rl = torch.optim.Adam(parameters_need_update, lr=1e-5)  #1e-5 0.00005
     loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words).to(device)
 
-    seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(4) + '.pt'))  # TODO: 7.13
+    seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))  # TODO: 7.13
     seq2seq.to(device)
-    network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(4) + '.pt'))  # TODO: 7.13
+    network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))  # TODO: 7.13
     network.to(device)
 
     parser_select = ['stackPtr0', 'bist']
@@ -720,14 +723,18 @@ def main():
         if args.treebank == 'ptb':
             batch_size = 10
         elif args.treebank == 'ctb':
-            batch_size = 1
+            batch_size = 10
         # num_batches = 0
         print('num_batches: ', str(num_batches))
-        for kkk in range(1, num_batches + 1): #num_batches
+        for kkk in range(1, num_batches + 1): # range(1, 1):
             # print('---'+str(kkk)+'---')
             # train_rl
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
             inp = word
+            print("Batch " + str(kkk) + " Size: " + str(inp.size()))
+            if inp.size()[1] >=140:
+                print("Skip batch not smaller than 140")
+                continue
             if True:  #inp.size()[1]<15:#True:  #inp.size()[1]<15: #TODO: debug hanwj
                 decode = network.decode_mst
                 _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
@@ -791,8 +798,9 @@ def main():
             pg['lr'] *= DECAY
 
         if epoch_i > 0:
-            torch.save(seq2seq.state_dict(), args.rl_finetune_seq2seq_save_path + str(epoch_i) + '.pt')
-            torch.save(network.state_dict(), args.rl_finetune_network_save_path + str(epoch_i) + '.pt')
+            print('Save models to' + args.rl_finetune_seq2seq_save_path)
+            torch.save(seq2seq.state_dict(), args.rl_finetune_seq2seq_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
+            torch.save(network.state_dict(), args.rl_finetune_network_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
 
         ####eval######
         seq2seq.eval()

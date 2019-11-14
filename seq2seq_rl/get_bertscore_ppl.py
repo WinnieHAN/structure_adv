@@ -1,23 +1,30 @@
 from bert_score import score
 import numpy as np
+import argparse
 
-LANGUAGE_CODE = 'en'
+args_parser = argparse.ArgumentParser(description='Get bertscore and ppl score')
+args_parser.add_argument('--prefix', type=str, required=True, help='prefix for save temp')
+args = args_parser.parse_args()
+
+LANGUAGE_CODE = 'zh'
+
 #TODO(lwzhang) temporarily used hard code to sepcecify saved score file. Same with rl.py
-SCORE_PREFIX = 'dir_check_'
+# SCORE_PREFIX = '/hdd2/zhanglw/code/structure_adv/batch10_'
+SCORE_PREFIX = args.prefix
 
 # ===============bertscore===============================
 
-with open("cands.txt", encoding='utf8') as f:  # cands.txt
+with open(SCORE_PREFIX + "cands.txt", encoding='utf8') as f:  # cands.txt
     cands = [line.strip() for line in f]
-with open("refs.txt") as f:
+with open(SCORE_PREFIX + "refs.txt") as f:
     refs = [line.strip() for line in f]
 
 # print(cands)
 # print(refs)
 # P,R,F = score(cands, refs, bert="bert-base-uncased")
-# P, R, F = score(cands, refs, lang=LANGUAGE_CODE, verbose=False)
+P, R, F = score(cands, refs, lang=LANGUAGE_CODE, verbose=False)
 # TODO(lwzhang) current score only support enlish
-P,R,F = score(cands, refs, model_type='bert-base-uncased', verbose=False)
+# P,R,F = score(cands, refs, model_type='bert-base-uncased', verbose=False)
 np.savetxt(SCORE_PREFIX + 'temp.txt', F.cpu().numpy())
 
 import torch
