@@ -805,93 +805,91 @@ def main():
         ####eval######
         seq2seq.eval()
         network.eval()
-        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
-        pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        if args.treebank == 'ptb':
-            pred_filename_test = 'dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
-            src_filename_test = 'dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
-        elif args.treebank == 'ctb':
-            src_filename_test = 'ctb_dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
-            pred_filename_test = 'ctb_dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
+        with torch.no_grad():
+            ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
+            pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+            if args.treebank == 'ptb':
+                pred_filename_test = 'dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
+                src_filename_test = 'dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
+            elif args.treebank == 'ctb':
+                src_filename_test = 'ctb_dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
+                pred_filename_test = 'ctb_dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
 
-        pred_writer_test.start(pred_filename_test)
+            pred_writer_test.start(pred_filename_test)
 
-        src_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        src_writer_test.start(src_filename_test)
+            src_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+            src_writer_test.start(src_filename_test)
 
-        nll = 0
-        token_num = 0
-        kk = 0
-        # batch_size_for_eval = 1
-        print("Ignore the eval part....")
-        for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
-            
-            continue
-
-            kk += 1
-            print('-------'+str(kk)+'-------')
-            # if kk > 10:  # TODO:8.9
-            #     break
-            word, char, pos, heads, types, masks, lengths = batch
-            print(lengths)
-            inp = word  #, _ = seq2seq.add_noise(word, lengths)
-            sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
-            end_position = torch.eq(sel, END_token).nonzero()
-            masks_sel = torch.ones_like(sel, dtype=torch.float)
-            lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
-            if not len(end_position) == 0:
-                ij_back = -1
-                for ij in end_position:
-                    if not (ij[0]==ij_back):
-                        lengths_sel[ij[0]] = ij[1]
-                        masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
-                        ij_back = ij[0]
-            with torch.no_grad():
-                heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
-                                                leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                if 'stackPtr0' in parser_select:
-                    sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
-                                                                                  lengths_sel,
-                                                                                  beam=1)  # beam=1 ?? it should be equal to M TODO:
-                if 'stackPtr1' in parser_select:
-                    sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
-                                                                                        lengths_sel,
-                                                                                        beam=1)  # beam=1 ?? it should be equal to M TODO:
-                elif 'bist' in parser_select:
-                    str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                               one_stc in sel.cpu().numpy()]
-                    stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
-                    sudo_heads_pred_1 = np.array(
-                        [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for stc
-                         in stc_pred_1])
-            ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
-                                                                          golden_out=heads, mask_id=END_token,
-                                                                          stc_length_out=lengths_sel,
-                                                                          sudo_golden_out=sudo_heads_pred,
-                                                                          sudo_golden_out_1=sudo_heads_pred_1,
-                                                                          ori_words=word,
-                                                                          ori_words_length=lengths
-                                                                          )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+            nll = 0
+            token_num = 0
+            kk = 0
+            # batch_size_for_eval = 1
+            print("Ignore the eval part....")
+            for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
+                kk += 1
+                print('-------'+str(kk)+'-------')
+                # if kk > 10:  # TODO:8.9
+                #     break
+                word, char, pos, heads, types, masks, lengths = batch
+                print(lengths)
+                inp = word  #, _ = seq2seq.add_noise(word, lengths)
+                sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+                end_position = torch.eq(sel, END_token).nonzero()
+                masks_sel = torch.ones_like(sel, dtype=torch.float)
+                lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                if not len(end_position) == 0:
+                    ij_back = -1
+                    for ij in end_position:
+                        if not (ij[0]==ij_back):
+                            lengths_sel[ij[0]] = ij[1]
+                            masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                            ij_back = ij[0]
+                with torch.no_grad():
+                    heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
+                                                    leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                    if 'stackPtr0' in parser_select:
+                        sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
+                                                                                    lengths_sel,
+                                                                                    beam=1)  # beam=1 ?? it should be equal to M TODO:
+                    if 'stackPtr1' in parser_select:
+                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
+                                                                                            lengths_sel,
+                                                                                            beam=1)  # beam=1 ?? it should be equal to M TODO:
+                    elif 'bist' in parser_select:
+                        str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                                one_stc in sel.cpu().numpy()]
+                        stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                        sudo_heads_pred_1 = np.array(
+                            [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for stc
+                            in stc_pred_1])
+                ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
+                                                                            golden_out=heads, mask_id=END_token,
+                                                                            stc_length_out=lengths_sel,
+                                                                            sudo_golden_out=sudo_heads_pred,
+                                                                            sudo_golden_out_1=sudo_heads_pred_1,
+                                                                            ori_words=word,
+                                                                            ori_words_length=lengths
+                                                                            )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
 
 
-            ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
-            ls_rl_ep += ls_rl_bh
-            rewards1 += reward1
-            rewards2 += reward2
-            rewards3 += reward3
-            rewards4 += reward4
-            rewards5 += reward5
-            sel = sel.detach().cpu().numpy()
-            lengths_sel = lengths_sel.detach().cpu().numpy()
-            print(sel)
-            pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
-            src_writer_test.write_stc(word, lengths, symbolic_root=True)
+                ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
+                ls_rl_ep += ls_rl_bh
+                rewards1 += reward1
+                rewards2 += reward2
+                rewards3 += reward3
+                rewards4 += reward4
+                rewards5 += reward5
+                sel = sel.detach().cpu().numpy()
+                lengths_sel = lengths_sel.detach().cpu().numpy()
+                print(sel)
+                pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
+                src_writer_test.write_stc(word, lengths, symbolic_root=True)
 
 
-            for i in range(len(lengths_sel)):
-                nll += sum(pb[i, 1:lengths_sel[i]])
-            token_num += sum(lengths_sel)-len(lengths_sel)
-        # nll /= token_num
+                for i in range(len(lengths_sel)):
+                    nll += sum(pb[i, 1:lengths_sel[i]])
+                token_num += sum(lengths_sel)-len(lengths_sel)
+            nll /= token_num
 
 
         print('test loss: ', ls_rl_ep)

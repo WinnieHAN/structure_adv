@@ -9,7 +9,7 @@ import torch, os, codecs, math
 # print('BLEU: %.4f%%' % (bleu * 100))
 
 #TODO(lwzhang) temporarily used hard code to sepcecify saved score file
-SCORE_PREFIX = '/hdd2/zhanglw/code/structure_adv/batch10_'
+SCORE_PREFIX = '/hdd2/zhanglw/code/structure_adv/batch10_eval_'
 
 def get_bleu(out, dec_out, vocab_size):
     out = out.tolist()
