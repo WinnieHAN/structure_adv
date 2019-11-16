@@ -38,7 +38,7 @@ from bist_parser.barchybrid.src.arc_hybrid import ArcHybridLSTM
 uid = uuid.uuid4().hex[:6]
 
 #TODO(lwzhang) temporarily used hard code to sepcecify saved score file
-SCORE_PREFIX = 'node2_'
+SCORE_PREFIX = 'batch10_'
 
 # 3 sub-models should be pretrained in our approach
 #   seq2seq pretrain, denoising autoencoder  | or using token-wise adv to generate adv examples.
@@ -720,10 +720,10 @@ def main():
         seq2seq.emb.weight.requires_grad = False
         END_token = word_alphabet.instance2index['_PAD']  # word_alphabet.get_instance('_PAD)==1  '_END'==3
         # num_batches = 100   # TODO:8.9
-        if args.treebank == 'ptb':
-            batch_size = 10
-        elif args.treebank == 'ctb':
-            batch_size = 10
+        # if args.treebank == 'ptb':
+        #     batch_size = 10
+        # elif args.treebank == 'ctb':
+        #     batch_size = 10
         # num_batches = 0
         print('num_batches: ', str(num_batches))
         for kkk in range(1, num_batches + 1): # range(1, 1):
@@ -797,7 +797,7 @@ def main():
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= DECAY
 
-        if epoch_i > 0:
+        if epoch_i >= 0:
             print('Save models to' + args.rl_finetune_seq2seq_save_path)
             torch.save(seq2seq.state_dict(), args.rl_finetune_seq2seq_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
             torch.save(network.state_dict(), args.rl_finetune_network_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
@@ -808,11 +808,11 @@ def main():
         ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
         if args.treebank == 'ptb':
-            pred_filename_test = 'dumped/pred_test%d' % (epoch_i)
-            src_filename_test = 'dumped/src_test%d' % (epoch_i)
+            pred_filename_test = 'dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
+            src_filename_test = 'dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
         elif args.treebank == 'ctb':
-            src_filename_test = 'ctb_dumped/src_test%d' % (epoch_i)
-            pred_filename_test = 'ctb_dumped/pred_test%d' % (epoch_i)
+            src_filename_test = 'ctb_dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
+            pred_filename_test = 'ctb_dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
 
         pred_writer_test.start(pred_filename_test)
 
@@ -823,7 +823,11 @@ def main():
         token_num = 0
         kk = 0
         # batch_size_for_eval = 1
+        print("Ignore the eval part....")
         for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
+            
+            continue
+
             kk += 1
             print('-------'+str(kk)+'-------')
             # if kk > 10:  # TODO:8.9
@@ -887,7 +891,7 @@ def main():
             for i in range(len(lengths_sel)):
                 nll += sum(pb[i, 1:lengths_sel[i]])
             token_num += sum(lengths_sel)-len(lengths_sel)
-        nll /= token_num
+        # nll /= token_num
 
 
         print('test loss: ', ls_rl_ep)
