@@ -38,7 +38,7 @@ from bist_parser.barchybrid.src.arc_hybrid import ArcHybridLSTM
 uid = uuid.uuid4().hex[:6]
 
 #TODO(lwzhang) temporarily used hard code to sepcecify saved score file
-SCORE_PREFIX = 'batch10_'
+SCORE_PREFIX = 'gpt2_'
 
 # 3 sub-models should be pretrained in our approach
 #   seq2seq pretrain, denoising autoencoder  | or using token-wise adv to generate adv examples.
@@ -705,14 +705,14 @@ def main():
     optim_bia_rl = torch.optim.Adam(parameters_need_update, lr=1e-5)  #1e-5 0.00005
     loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words).to(device)
 
-    seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))  # TODO: 7.13
+    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))  # TODO: 7.13
     seq2seq.to(device)
-    network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))  # TODO: 7.13
+    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))  # TODO: 7.13
     network.to(device)
 
     parser_select = ['stackPtr0', 'bist']
 
-    for epoch_i in range(EPOCHS):
+    for epoch_i in range(0, EPOCHS):
         print('======='+str(epoch_i)+'=========')
         ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
         network.eval()  # only train seq2seq
@@ -826,6 +826,7 @@ def main():
             # batch_size_for_eval = 1
             print("Ignore the eval part....")
             for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
+                continue
                 kk += 1
                 print('-------'+str(kk)+'-------')
                 # if kk > 10:  # TODO:8.9
@@ -889,7 +890,7 @@ def main():
                 for i in range(len(lengths_sel)):
                     nll += sum(pb[i, 1:lengths_sel[i]])
                 token_num += sum(lengths_sel)-len(lengths_sel)
-            nll /= token_num
+            # nll /= token_num
 
 
         print('test loss: ', ls_rl_ep)
