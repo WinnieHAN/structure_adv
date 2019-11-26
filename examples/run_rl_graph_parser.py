@@ -721,7 +721,7 @@ def main():
             batch_size = 10
         elif args.treebank == 'ctb':
             batch_size = 1
-        # num_batches = 0
+        num_batches = 0
         print('num_batches: ', str(num_batches))
         for kkk in range(1, num_batches + 1): #num_batches
             # print('---'+str(kkk)+'---')
@@ -780,7 +780,7 @@ def main():
                 rewards3 += reward3
                 rewards4 += reward4
                 rewards5 += reward5
-        if True:
+        if False:
             print('train loss: ', ls_rl_ep)
             print('train reward parser b: ', rewards1)
             print('train reward parser c: ', rewards2)
@@ -811,11 +811,20 @@ def main():
         src_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
         src_writer_test.start(src_filename_test)
 
+        pred_parse_writer_testA = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+        pred_parse_writer_testA.start(pred_filename_test+'_parseA.txt')
+
+        pred_parse_writer_testB = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+        pred_parse_writer_testB.start(pred_filename_test+'_parseB.txt')
+
+        pred_parse_writer_testC = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+        pred_parse_writer_testC.start(pred_filename_test+'_parseC.txt')
+
         nll = 0
         token_num = 0
         kk = 0
-        # batch_size_for_eval = 1
-        for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
+        batch_size_for_eval = 100
+        for batch in conllx_data.iterate_batch_tensor(data_test, batch_size_for_eval):  # batch_size
             kk += 1
             print('-------'+str(kk)+'-------')
             # if kk > 10:  # TODO:8.9
@@ -871,10 +880,12 @@ def main():
             rewards5 += reward5
             sel = sel.detach().cpu().numpy()
             lengths_sel = lengths_sel.detach().cpu().numpy()
-            print(sel)
+            # print(sel)
             pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
             src_writer_test.write_stc(word, lengths, symbolic_root=True)
-
+            pred_parse_writer_testA.write(sel, sel, heads_pred, types_pred, lengths_sel, symbolic_root=True)  # word, pos, head, type, lengths,
+            pred_parse_writer_testB.write(sel, sel, sudo_heads_pred, types_pred, lengths_sel, symbolic_root=True)  # word, pos, head, type, lengths,
+            pred_parse_writer_testC.write(sel, sel, sudo_heads_pred_1, types_pred, lengths_sel, symbolic_root=True)  # word, pos, head, type, lengths,
 
             for i in range(len(lengths_sel)):
                 nll += sum(pb[i, 1:lengths_sel[i]])
@@ -893,6 +904,9 @@ def main():
 
         pred_writer_test.close()
         src_writer_test.close()
+        pred_parse_writer_testA.close()
+        pred_parse_writer_testB.close()
+        pred_parse_writer_testC.close()
 
 
 if __name__ == '__main__':

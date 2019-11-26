@@ -239,6 +239,8 @@ class BiRecurrentConvCRF(BiRecurrentConv):
         else:
             return preds, (torch.eq(preds, target).float() * mask).sum()
 
+    def return_word_embedd(self):
+        return self.word_embedd
 
 class BiVarRecurrentConvCRF(BiVarRecurrentConv):
     def __init__(self, word_dim, num_words, char_dim, num_chars, num_filters, kernel_size, rnn_mode, hidden_size, num_layers, num_labels,

@@ -50,9 +50,9 @@ class CoNLLXWriter(object):
         for i in range(batch_size):
             for j in range(start, lengths[i] - end):
                 w = self.__word_alphabet.get_instance(word[i, j]).encode('utf-8')
-                p = self.__pos_alphabet.get_instance(pos[i, j]).encode('utf-8')
-                t = self.__type_alphabet.get_instance(type[i, j]).encode('utf-8')
-                h = head[i, j]
+                p = '_' #self.__pos_alphabet.get_instance(pos[i, j]).encode('utf-8')   # TODO:
+                t = '_' #self.__type_alphabet.get_instance(type[i, j]).encode('utf-8')
+                h = head[i][j]
                 self.__source_file.write('%d\t%s\t_\t_\t%s\t_\t%d\t%s\n' % (j, w, p, h, t))
             self.__source_file.write('\n')
 

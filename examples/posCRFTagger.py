@@ -32,7 +32,7 @@ def main():
     parser.add_argument('--tag_space', type=int, default=0, help='Dimension of tag space')
     parser.add_argument('--num_layers', type=int, default=1, help='Number of layers of RNN')
     parser.add_argument('--num_filters', type=int, default=30, help='Number of filters in CNN')
-    parser.add_argument('--char_dim', type=int, default=30, help='Dimension of Character embeddings')
+    parser.add_argument('--char_dim', type=int, default=30, help='Dimension of Character embeddings')  # 0
     parser.add_argument('--learning_rate', type=float, default=0.01, help='Learning rate')
     parser.add_argument('--decay_rate', type=float, default=0.1, help='Decay rate of learning rate')
     parser.add_argument('--gamma', type=float, default=0.0, help='weight for regularization')

@@ -14,8 +14,12 @@ with open("refs.txt") as f:
 # print(refs)
 # P,R,F = score(cands, refs, bert="bert-base-uncased")
 # P, R, F = score(cands, refs, lang=LANGUAGE_CODE, verbose=False)
-# TODO(lwzhang) current score only support enlish
-P,R,F = score(cands, refs, model_type='bert-base-uncased', verbose=False)
+# TODO(lwzhang) current score only support english
+if LANGUAGE_CODE is 'en':
+    P,R,F = score(cands, refs, model_type='bert-base-uncased', verbose=False)
+elif LANGUAGE_CODE is 'zh':
+    P, R, F = score(cands, refs, lang=LANGUAGE_CODE, verbose=False)
+
 np.savetxt('./temp.txt', F.cpu().numpy())
 
 import torch
@@ -39,6 +43,8 @@ if LANGUAGE_CODE is 'en':
                 print('space sentence')
                 continue
             s = enc.encode(s)  # + [50256]  #50256 is the token_id for <|endoftext|>
+            if len(s)==1:
+                s = s + [1]
             batch = torch.tensor([s]).to(device)
             # print(batch)
             loss = model(batch, lm_labels=batch)  # everage -logp
@@ -63,7 +69,7 @@ elif LANGUAGE_CODE is 'zh':
 
     # load pretrained weights
     # model can be found here: https://drive.google.com/file/d/1W6n7Kv6kvHthUX18DhdGSzBYkyzDvxYh/view?usp=sharing
-    old_state_dict = torch.load("./pretrained_model_gpt/model_state_epoch_62.th", map_location=lambda storage, loc: storage)
+    old_state_dict = torch.load("./pretrained_model_gpt/model_state_epoch_62.th", map_location=lambda storage, loc: storage)  # TODO:
     new_state_dict = decoder.state_dict()
     for item in new_state_dict.keys():
         new_state_dict[item] = old_state_dict['module.' + item]
