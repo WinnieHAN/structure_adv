@@ -392,7 +392,7 @@ def main():
             batch_size = kkkk  # 10
         elif args.treebank == 'ctb':
             batch_size = 1
-        num_batches = (39831/2)/kkkk
+        num_batches = 30 #(39831/2)/kkkk
         print('num_batches: ', str(num_batches))
         for kkk in range(1, num_batches + 1): #num_batches
             print('-train--'+str(kkk)+'---')
