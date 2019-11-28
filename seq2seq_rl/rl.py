@@ -7,7 +7,7 @@ import torch, os, codecs, math
 # bleu = BLEU(ref, cnd)
 #
 # print('BLEU: %.4f%%' % (bleu * 100))
-
+SCORE_PREFIX = ''
 
 def get_bleu(out, dec_out, vocab_size):
     out = out.tolist()
@@ -233,8 +233,8 @@ class TagLossBiafRL(nn.Module):
         return reward
 
     def write_text(self, ori_words, ori_words_length, sel, stc_length_out):
-        condsf = 'cands.txt'
-        refs = 'refs.txt'
+        condsf = SCORE_PREFIX + 'cands.txt'
+        refs = SCORE_PREFIX + 'refs.txt'
         oris = [[self.word_alphabet.get_instance(ori_words[si, wi]).encode('utf-8') for wi in range(1, ori_words_length[si])] for si in range(len(ori_words))]
         preds = [[self.word_alphabet.get_instance(sel[si, wi]).encode('utf-8') for wi in range(1, stc_length_out[si])] for si in range(len(sel))]
 
@@ -279,11 +279,16 @@ class TagLossBiafRL(nn.Module):
         ####3#####add meaning_preservation as reward
         batch = sel.shape[0]
         self.write_text(ori_words, ori_words_length, sel, stc_length_out)
-        os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
-        meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')#*100
-        logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt') # * (-0.1)
+        os.system('/home/zhanglw/bin/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py --prefix ' + SCORE_PREFIX)
+        meaning_preservation = np.loadtxt(SCORE_PREFIX + 'temp.txt')#*100
+        logppl = np.loadtxt(SCORE_PREFIX + 'temp_ppl.txt') # * (-0.1)
         ppl = -np.exp(logppl) * 0.001
         # rewards = meaning_preservation * 10  # affect more
+        os.remove(SCORE_PREFIX + 'temp_ppl.txt')
+        os.remove(SCORE_PREFIX + 'temp.txt')
+        os.remove(SCORE_PREFIX + 'cands.txt')
+        os.remove(SCORE_PREFIX + 'refs.txt')
+
 
         bleus_w = []
         for i in range(batch):

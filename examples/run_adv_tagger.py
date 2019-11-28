@@ -28,6 +28,8 @@ import pickle
 from nltk.tag.senna import SennaTagger
 from nltk.tag import StanfordPOSTagger
 
+SCORE_PREFIX = ''
+
 def main():
     parser = argparse.ArgumentParser(description='Tuning with bi-directional RNN-CNN-CRF')
     parser.add_argument('--mode', choices=['RNN', 'LSTM', 'GRU'], help='architecture of rnn', required=True)
@@ -349,8 +351,8 @@ def main():
 
     print('Train seq2seq model using rl with reward of biaffine.')
 
-    sudo_golden_tagger = SennaTagger('/home/hanwj/PycharmProjects/structure_adv/tagging_models/senna')
-    sudo_golden_tagger_1 = StanfordPOSTagger(model_filename='/home/hanwj/PycharmProjects/structure_adv/tagging_models/stanford-postagger-2018-10-16/models/english-bidirectional-distsim.tagger', path_to_jar='/home/hanwj/PycharmProjects/structure_adv/tagging_models/stanford-postagger-2018-10-16/stanford-postagger.jar')
+    sudo_golden_tagger = SennaTagger('/home/zhanglw/code/structure_adv/tagging_models/senna')
+    sudo_golden_tagger_1 = StanfordPOSTagger(model_filename='/home/zhanglw/code/structure_adv/tagging_models/stanford-postagger/models/english-bidirectional-distsim.tagger', path_to_jar='/home/zhanglw/code/structure_adv/tagging_models/stanford-postagger/stanford-postagger.jar')
 
     EPOCHS = 80
     DECAY = 0.97
@@ -360,9 +362,9 @@ def main():
     optim_bia_rl = torch.optim.Adam(parameters_need_update, lr=1e-5)  #1e-5 0.00005
     loss_biaf_rl = TagLossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words).to(device)
 
-    seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(1) + '.pt'))  # TODO: 7.13
+    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + SCORE_PREFIX + str(1) + '.pt'))  # TODO: 7.13
     seq2seq.to(device)
-    network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(1) + '.pt'))  # TODO: 7.13
+    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + SCORE_PREFIX + str(1) + '.pt'))  # TODO: 7.13
     network.to(device)
 
     def word_to_chars_tensor(shape, sel, lengths_sel, word_alphabet, char_alphabet):
@@ -380,6 +382,7 @@ def main():
     parser_select = ['tagger0', 'tagger1']
 
     for epoch_i in range(EPOCHS):
+        torch.cuda.empty_cache()
         print('======='+str(epoch_i)+'=========')
         ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
         network.eval()  # only train seq2seq
@@ -387,18 +390,17 @@ def main():
         seq2seq.emb.weight.requires_grad = False
         END_token = word_alphabet.instance2index['_PAD']  # word_alphabet.get_instance('_PAD)==1  '_END'==3
         print('END_token: '+str(END_token))
-        kkkk = 256
+        # kkkk = 32
         if args.treebank == 'ptb':
-            batch_size = kkkk  # 10
+            # batch_size = kkkk  # 10
+            pass
         elif args.treebank == 'ctb':
             batch_size = 1
-        num_batches = 30 #(39831/2)/kkkk
+        # num_batches = 30 #(39831/2)/kkkk
         print('num_batches: ', str(num_batches))
         for kkk in range(1, num_batches + 1): #num_batches
             print('-train--'+str(kkk)+'---')
             # train_rl
-            if kkk==6:
-                print('two long time')
             word, char, labels, _, _, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
             inp = word
             if True:  #inp.size()[1]<15:#True:  #inp.size()[1]<15: #TODO: debug hanwj
@@ -419,7 +421,6 @@ def main():
                             lengths_sel[ij[0]] = ij[1]
                             masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
                             ij_back = ij[0]
-
                 with torch.no_grad():
                     try:
                         char1 = word_to_chars_tensor(char.shape, sel1, lengths_sel, word_alphabet, char_alphabet)
@@ -465,9 +466,9 @@ def main():
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= DECAY
 
-        if epoch_i > 0:
-            torch.save(seq2seq.state_dict(), args.rl_finetune_seq2seq_save_path + str(epoch_i) + '.pt')
-            torch.save(network.state_dict(), args.rl_finetune_network_save_path + str(epoch_i) + '.pt')
+        if epoch_i >= 0:
+            torch.save(seq2seq.state_dict(), args.rl_finetune_seq2seq_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
+            torch.save(network.state_dict(), args.rl_finetune_network_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
 
         ####eval######
         seq2seq.eval()
@@ -475,8 +476,8 @@ def main():
         ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
         if args.treebank == 'ptb':
-            pred_filename_test = 'tagging_dumped/pred_test%d' % (epoch_i)
-            src_filename_test = 'tagging_dumped/src_test%d' % (epoch_i)
+            pred_filename_test = 'tagging_dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
+            src_filename_test = 'tagging_dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
         elif args.treebank == 'ctb':
             src_filename_test = 'tagging_ctb_dumped/src_test%d' % (epoch_i)
             pred_filename_test = 'tagging_ctb_dumped/pred_test%d' % (epoch_i)
@@ -595,3 +596,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

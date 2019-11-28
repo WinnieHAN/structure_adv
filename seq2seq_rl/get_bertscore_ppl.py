@@ -1,13 +1,18 @@
 from bert_score import score
 import numpy as np
+import argparse
+
+args_parser = argparse.ArgumentParser(description='Get bertscore and ppl score')
+args_parser.add_argument('--prefix', type=str, required=True, help='prefix for save temp')
+args = args_parser.parse_args()
 
 LANGUAGE_CODE = 'en'
-
+SCORE_PREFIX = args.prefix
 # ===============bertscore===============================
 
-with open("cands.txt", encoding='utf8') as f:  # cands.txt
+with open(SCORE_PREFIX + "cands.txt", encoding='utf8') as f:  # cands.txt
     cands = [line.strip() for line in f]
-with open("refs.txt") as f:
+with open(SCORE_PREFIX + "refs.txt") as f:
     refs = [line.strip() for line in f]
 
 # print(cands)
@@ -20,7 +25,7 @@ if LANGUAGE_CODE is 'en':
 elif LANGUAGE_CODE is 'zh':
     P, R, F = score(cands, refs, lang=LANGUAGE_CODE, verbose=False)
 
-np.savetxt('./temp.txt', F.cpu().numpy())
+np.savetxt(SCORE_PREFIX + 'temp.txt', F.cpu().numpy())
 
 import torch
 
@@ -52,7 +57,7 @@ if LANGUAGE_CODE is 'en':
             ppls.append(loss.cpu().numpy())  # the small, the better
             # ppls.append(math.exp(loss.cpu().numpy()))  # the small, the better
         # print(ppls)
-        np.savetxt('./temp_ppl.txt', np.array(ppls))
+        np.savetxt(SCORE_PREFIX + 'temp_ppl.txt', np.array(ppls))
 elif LANGUAGE_CODE is 'zh':
     # =============== zh ppl ===============================
     # here is a GPT based ppl calculator for Chinese.
@@ -91,6 +96,6 @@ elif LANGUAGE_CODE is 'zh':
             probs = F.softmax(logits.squeeze() / 1.0, dim=-1)
             log_ppl = get_log_ppl(logits, s_tensor.squeeze())
             ppls.append(log_ppl.cpu().numpy())
-        np.savetxt('./temp_ppl.txt', np.array(ppls))
+        np.savetxt(SCORE_PREFIX + 'temp_ppl.txt', np.array(ppls))
 else:
     print("Error Language Code!")
