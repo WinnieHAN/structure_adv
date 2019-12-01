@@ -98,6 +98,7 @@ def main():
 
     args_parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
 
+    args_parser.add_argument('--direct_eval', action='store_true', help='direct eval without generation process')
     args = args_parser.parse_args()
 
     # args.train = "data/ptb/dev.conllu"
@@ -797,7 +798,7 @@ def main():
         ####eval######
         seq2seq.eval()
         network.eval()
-        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
+        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = rewardsall1 = rewardsall2 = rewardsall3 = 0
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
         if args.treebank == 'ptb':
             pred_filename_test = 'dumped/pred_test%d' % (epoch_i)
@@ -823,28 +824,36 @@ def main():
         nll = 0
         token_num = 0
         kk = 0
-        batch_size_for_eval = 100
+        batch_size_for_eval = 20
         for batch in conllx_data.iterate_batch_tensor(data_test, batch_size_for_eval):  # batch_size
             kk += 1
             print('-------'+str(kk)+'-------')
-            # if kk > 10:  # TODO:8.9
-            #     break
+            if kk > 100:  # TODO:8.9
+                break
             word, char, pos, heads, types, masks, lengths = batch
-            print(lengths)
-            inp = word  #, _ = seq2seq.add_noise(word, lengths)
-            sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
-            end_position = torch.eq(sel, END_token).nonzero()
-            masks_sel = torch.ones_like(sel, dtype=torch.float)
-            lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
-            if not len(end_position) == 0:
-                ij_back = -1
-                for ij in end_position:
-                    if not (ij[0]==ij_back):
-                        lengths_sel[ij[0]] = ij[1]
-                        masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
-                        ij_back = ij[0]
+            # print(lengths)
+            print(args.direct_eval)
+            if not args.direct_eval:
+                inp = word  #, _ = seq2seq.add_noise(word, lengths)
+                sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+                end_position = torch.eq(sel, END_token).nonzero()
+                masks_sel = torch.ones_like(sel, dtype=torch.float)
+                lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                if not len(end_position) == 0:
+                    ij_back = -1
+                    for ij in end_position:
+                        if not (ij[0]==ij_back):
+                            lengths_sel[ij[0]] = ij[1]
+                            masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                            ij_back = ij[0]
+            else:
+                sel = word
+                pb = torch.ones_like(sel, dtype=torch.float).fill_(0)
+                lengths_sel = lengths
+                masks_sel = masks
             with torch.no_grad():
-                heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel, length=lengths_sel,
+                heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel,
+                                                length=lengths_sel,
                                                 leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                 if 'stackPtr0' in parser_select:
                     sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
@@ -861,14 +870,25 @@ def main():
                     sudo_heads_pred_1 = np.array(
                         [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for stc
                          in stc_pred_1])
-            ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
-                                                                          golden_out=heads, mask_id=END_token,
-                                                                          stc_length_out=lengths_sel,
-                                                                          sudo_golden_out=sudo_heads_pred,
-                                                                          sudo_golden_out_1=sudo_heads_pred_1,
-                                                                          ori_words=word,
-                                                                          ori_words_length=lengths
-                                                                          )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                # ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
+                #                                                               golden_out=heads, mask_id=END_token,
+                #                                                               stc_length_out=lengths_sel,
+                #                                                               sudo_golden_out=sudo_heads_pred,
+                #                                                               sudo_golden_out_1=sudo_heads_pred_1,
+                #                                                               ori_words=word,
+                #                                                               ori_words_length=lengths
+                #                                                               )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                #
+
+                ls_rl_bh, _ , _ , _ , _ , _ , reward1, reward2, reward3, reward4, reward5 , rewardall1, rewardall2, rewardall3 = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=heads_pred,
+                                                                                                                                                              golden_out=heads, mask_id=END_token,
+                                                                                                                                                              stc_length_out=lengths_sel,
+                                                                                                                                                              sudo_golden_out=sudo_heads_pred,
+                                                                                                                                                              sudo_golden_out_1=sudo_heads_pred_1,
+                                                                                                                                                              ori_words=word,
+                                                                                                                                                              ori_words_length=lengths
+                                                                                                                                                              )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+
 
 
             ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
@@ -878,6 +898,9 @@ def main():
             rewards3 += reward3
             rewards4 += reward4
             rewards5 += reward5
+            rewardsall1 += rewardall1
+            rewardsall2 += rewardall2
+            rewardsall3 += rewardall3
             sel = sel.detach().cpu().numpy()
             lengths_sel = lengths_sel.detach().cpu().numpy()
             # print(sel)
@@ -890,15 +913,27 @@ def main():
             for i in range(len(lengths_sel)):
                 nll += sum(pb[i, 1:lengths_sel[i]])
             token_num += sum(lengths_sel)-len(lengths_sel)
+
+        rewards1 = rewards1 * 1.0 / sum(data_test[1])
+        rewards2 = rewards2 * 1.0 / sum(data_test[1])
+        rewards3 = rewards3 * 1.0 / sum(data_test[1])
+        rewards4 = rewards4 * 1.0 / sum(data_test[1])
+        rewards5 = rewards5 * 1.0 / sum(data_test[1])
+        rewardsall1 = rewardsall1 * 1.0 / sum(data_test[1])
+        rewardsall2 = rewardsall2 * 1.0 / sum(data_test[1])
+        rewardsall3 = rewardsall3 * 1.0 / sum(data_test[1])
+
         nll /= token_num
 
-
         print('test loss: ', ls_rl_ep)
-        print('test reward parser b: ', rewards1)
-        print('test reward parser c: ', rewards2)
-        print('test reward parser b^c: ', rewards3)
-        print('test reward meaning: ', rewards4)
-        print('test reward fluency: ', rewards5)
+        print('test metrics parser b: ', rewards1)
+        print('test metrics parser c: ', rewards2)
+        print('test metrics parser b^c: ', rewards3)
+        print('test metrics meaning: ', rewards4)
+        print('test metrics fluency: ', rewards5)
+        print('test metrics whole parser b: ', rewardsall1)
+        print('test metrics whole parser c: ', rewardsall2)
+        print('test metrics whole parser b^c: ', rewardsall3)
 
         print('test nll: ', nll)
 
