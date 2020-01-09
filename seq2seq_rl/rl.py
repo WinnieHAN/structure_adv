@@ -1,7 +1,9 @@
 from nltk.translate.bleu_score import sentence_bleu as BLEU
 import numpy as np
 import torch.nn as nn
-import torch, os, codecs, math
+import torch, os, codecs
+import socket
+import json
 # ref = [[1, 2, 3, 4, 5, 6]]
 # cnd = [1, 3, 4, 5, 6]
 # bleu = BLEU(ref, cnd)
@@ -246,7 +248,7 @@ class LossBiafRL1(nn.Module):
 
 
 class LossBiafRL(nn.Module):
-    def __init__(self, device, word_alphabet, vocab_size):
+    def __init__(self, device, word_alphabet, vocab_size, port):
         super(LossBiafRL, self).__init__()
 
         self.bl = 0
@@ -254,6 +256,7 @@ class LossBiafRL(nn.Module):
         self.device = device
         self.word_alphabet = word_alphabet
         self.vocab_size = vocab_size
+        self.port = port
 
     def get_reward_diff(self, out, dec_out, length_out, ori_words, ori_words_length):
         stc_dda = sum([0 if out[i] == dec_out[i] else 1 for i in range(1, length_out)])
@@ -268,6 +271,31 @@ class LossBiafRL(nn.Module):
         reward = stc_dda
 
         return reward
+
+    def get_bertscore_ppl(self, ori_words, ori_words_length, sel, stc_length_out):
+
+        oris = [[self.word_alphabet.get_instance(ori_words[si, wi]).encode('utf-8') for wi in range(1, ori_words_length[si])] for si in range(len(ori_words))]
+        preds = [[self.word_alphabet.get_instance(sel[si, wi]).encode('utf-8') for wi in range(1, stc_length_out[si])] for si in range(len(sel))]
+        preds_s = [' '.join(i) for i in preds]
+
+        oris_s = [' '.join(i) for i in oris]
+
+        message = {'refs': oris_s,
+                   'cands': preds_s}
+        json_massage = json.dumps(message)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', self.port))
+        sock.sendall(json_massage.encode('utf-8'))
+
+        rec_data = sock.recv(102400)
+        byte_res = rec_data
+        # while len(rec_data) == 0:
+        #     rec_data = self.sock.recv(102400)
+        #     byte_res += rec_data
+        json_data = json.loads(byte_res)
+        sock.close()
+        return json_data['bertscore'], json_data['ppl']
+
 
     def write_text(self, ori_words, ori_words_length, sel, stc_length_out):
         condsf = SCORE_PREFIX + 'cands.txt'
@@ -315,20 +343,14 @@ class LossBiafRL(nn.Module):
 
         ####3#####add meaning_preservation as reward
         batch = sel.shape[0]
-        self.write_text(ori_words, ori_words_length, sel, stc_length_out)
-        os.system('/hdd2/zhanglw/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py --prefix ' + SCORE_PREFIX)
-        meaning_preservation = np.loadtxt(SCORE_PREFIX + 'temp.txt')*100
-        logppl = np.loadtxt(SCORE_PREFIX + 'temp_ppl.txt') # * (-0.1)
-        ppl = -np.exp(logppl) * 0.001
-
-        # delete the temp file in order to investigate the load error
-        os.remove(SCORE_PREFIX + 'temp_ppl.txt')
-        os.remove(SCORE_PREFIX + 'temp.txt')
-        os.remove(SCORE_PREFIX + 'cands.txt')
-        os.remove(SCORE_PREFIX + 'refs.txt')
-        if (os.path.exists(SCORE_PREFIX + 'refs.txt')):
-            print('Delete Error!')
-        # rewards = meaning_preservation * 10  # affect more
+        # self.write_text(ori_words, ori_words_length, sel, stc_length_out)
+        # os.system('/hdd2/zhanglw/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py --prefix ' + SCORE_PREFIX)
+        # meaning_preservation = np.loadtxt(SCORE_PREFIX + 'temp.txt')*100
+        # logppl = np.loadtxt(SCORE_PREFIX + 'temp_ppl.txt') # * (-0.1)
+        #
+        meaning_preservation, logppl = self.get_bertscore_ppl(ori_words, ori_words_length, sel, stc_length_out)
+        meaning_preservation = np.array(meaning_preservation) * 100
+        ppl = -np.exp(np.array(logppl)) * 0.001
 
         bleus_w = []
         for i in range(batch):

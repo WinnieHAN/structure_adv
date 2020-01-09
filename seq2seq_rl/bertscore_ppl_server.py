@@ -60,7 +60,7 @@ def pre_ppl(language_code):
         model = GPT2LMHeadModel.from_pretrained(ROOT_DIR + '/pretrained_model_gpt2')
     elif language_code == 'zh':
         import transformers
-        from tokenizations import tokenization_bert
+        from seq2seq_rl.tokenizations import tokenization_bert
         enc = tokenization_bert.BertTokenizer(vocab_file=ROOT_DIR + '/pretrained_model_gpt2_zh/vocab.txt')
         model = transformers.modeling_gpt2.GPT2LMHeadModel.from_pretrained(ROOT_DIR + '/pretrained_model_gpt2_zh')
     model.to(device)
@@ -126,7 +126,7 @@ def main():
         connection, client_address = sock.accept()
         try:
             # get data
-            data = connection.recv(10240)
+            data = connection.recv(512000)
             if data:
                 json_data = json.loads(data)
                 refs = json_data['refs']
