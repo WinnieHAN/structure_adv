@@ -5,8 +5,6 @@ current_path = os.path.dirname(os.path.realpath(__file__))
 root_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(root_path)
 
-ROOT_DIR = os.path.abspath(os.path.join(os.getcwd(), '..'))
-
 # from bert_score import score
 from bert_score.utils import lang2model, model2layers, bert_cos_score_idf
 from transformers import AutoModel, AutoTokenizer
@@ -18,8 +16,8 @@ from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer
 import torch
 from collections import defaultdict
 
-bertscore_models = {'en': ROOT_DIR + '/pretrained_model_bert',
-                    'zh': ROOT_DIR + '/pretrained_model_bert_zh'}
+bertscore_models = {'en': root_path + '/pretrained_model_bert',
+                    'zh': root_path + '/pretrained_model_bert_zh'}
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -45,9 +43,10 @@ def pre_bertscore(language_code):
 
 
 def get_bertscore(model, tokenizer, idf_dict, refs, cands):
-    all_preds = bert_cos_score_idf(model, refs, cands, tokenizer, idf_dict,
-                                   verbose=False, device=device,
-                                   batch_size=64, all_layers=None)
+    with torch.no_grad():
+        all_preds = bert_cos_score_idf(model, refs, cands, tokenizer, idf_dict,
+                                       verbose=False, device=device,
+                                       batch_size=64, all_layers=None)
     P = all_preds[..., 0].cpu()
     R = all_preds[..., 1].cpu()
     F1 = all_preds[..., 2].cpu()
@@ -56,13 +55,13 @@ def get_bertscore(model, tokenizer, idf_dict, refs, cands):
 
 def pre_ppl(language_code):
     if language_code == 'en':
-        enc = GPT2Tokenizer.from_pretrained(ROOT_DIR + '/pretrained_model_gpt2')
-        model = GPT2LMHeadModel.from_pretrained(ROOT_DIR + '/pretrained_model_gpt2')
+        enc = GPT2Tokenizer.from_pretrained(root_path + '/pretrained_model_gpt2')
+        model = GPT2LMHeadModel.from_pretrained(root_path + '/pretrained_model_gpt2')
     elif language_code == 'zh':
         import transformers
         from seq2seq_rl.tokenizations import tokenization_bert
-        enc = tokenization_bert.BertTokenizer(vocab_file=ROOT_DIR + '/pretrained_model_gpt2_zh/vocab.txt')
-        model = transformers.modeling_gpt2.GPT2LMHeadModel.from_pretrained(ROOT_DIR + '/pretrained_model_gpt2_zh')
+        enc = tokenization_bert.BertTokenizer(vocab_file=root_path + '/pretrained_model_gpt2_zh/vocab.txt')
+        model = transformers.modeling_gpt2.GPT2LMHeadModel.from_pretrained(root_path + '/pretrained_model_gpt2_zh')
     model.to(device)
     model.eval()
     return enc, model

@@ -30,6 +30,7 @@ from seq2seq_rl.rl import LossBiafRL
 from stack_parser_eval import third_party_parser
 import pickle
 from bist_parser.barchybrid.src.arc_hybrid import ArcHybridLSTM
+import global_variables
 
 uid = uuid.uuid4().hex[:6]
 
@@ -95,6 +96,11 @@ def main():
 
     args_parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
     args_parser.add_argument('--port', type=int, default=10048, help='localhost port for berscore server')
+    args_parser.add_argument('--z1_weight', type=float, default=1.0, help='reward weight of z1')
+    args_parser.add_argument('--z2_weight', type=float, default=1.0, help='reward weight of z2')
+    args_parser.add_argument('--z3_weight', type=float, default=1.0, help='reward weight of z3')
+    args_parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
+    args_parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
 
     args = args_parser.parse_args()
 
@@ -119,6 +125,8 @@ def main():
     type_space = args.type_space
     num_layers = args.num_layers
     num_filters = args.num_filters
+
+    # optimizer parameter
     learning_rate = args.learning_rate
     opt = args.opt
     momentum = 0.9
@@ -128,6 +136,7 @@ def main():
     clip = args.clip
     gamma = args.gamma
     schedule = args.schedule
+
     p_rnn = tuple(args.p_rnn)
     p_in = args.p_in
     p_out = args.p_out
@@ -138,10 +147,16 @@ def main():
     freeze = args.freeze
     word_embedding = args.word_embedding
     word_path = args.word_path
-
     use_char = args.char
     char_embedding = args.char_embedding
     char_path = args.char_path
+
+    # rl weight
+    global_variables.Z1_REWARD_WEIGHT = args.z1_weight
+    global_variables.Z2_REWARD_WEIGHT = args.z2_weight
+    global_variables.Z3_REWARD_WEIGHT = args.z3_weight
+    global_variables.MP_REWARD_WEIGHT = args.mp_weight
+    global_variables.PPL_REWARD_WEIGHT = args.ppl_weight
 
     use_pos = args.pos
     pos_dim = args.pos_dim

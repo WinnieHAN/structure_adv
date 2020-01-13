@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch, os, codecs
 import socket
 import json
+import global_variables
 # ref = [[1, 2, 3, 4, 5, 6]]
 # cnd = [1, 3, 4, 5, 6]
 # bleu = BLEU(ref, cnd)
@@ -280,6 +281,9 @@ class LossBiafRL(nn.Module):
 
         oris_s = [' '.join(i) for i in oris]
 
+        print(oris_s[0].decode('utf-8'))
+        print(preds_s[0].decode('utf-8'))
+
         message = {'refs': oris_s,
                    'cands': preds_s}
         json_massage = json.dumps(message)
@@ -349,19 +353,23 @@ class LossBiafRL(nn.Module):
         # logppl = np.loadtxt(SCORE_PREFIX + 'temp_ppl.txt') # * (-0.1)
         #
         meaning_preservation, logppl = self.get_bertscore_ppl(ori_words, ori_words_length, sel, stc_length_out)
-        meaning_preservation = np.array(meaning_preservation) * 100
-        ppl = -np.exp(np.array(logppl)) * 0.001
+        meaning_preservation = np.array(meaning_preservation)
+        ppl = -np.exp(np.array(logppl))
 
-        bleus_w = []
-        for i in range(batch):
-            bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
-
-            bleus_w.append(bleu)
-        bleus_w = np.asarray(bleus_w)
+        # bleus_w = []
+        # for i in range(batch):
+        #     bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
+        #
+        #     bleus_w.append(bleu)
+        # bleus_w = np.asarray(bleus_w)
 
         #-----------------------------------------------
 
-        rewards = (meaning_preservation + ppl + rewards_z1 + rewards_z2 + rewards_z3)*0.001      #TODO  0.1# + bleus_w*5
+        rewards = (meaning_preservation * global_variables.MP_REWARD_WEIGHT +
+                   ppl * global_variables.PPL_REWARD_WEIGHT +
+                   rewards_z1 * global_variables.Z1_REWARD_WEIGHT +
+                   rewards_z2 * global_variables.Z2_REWARD_WEIGHT +
+                   rewards_z3 * global_variables.Z3_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
         # rewards = bleus_w * 10  # 8.26
 
         ls3 = 0
@@ -378,7 +386,6 @@ class LossBiafRL(nn.Module):
         rewards_ave3 = np.average(rewards)
         self.bl = (self.bl * self.bn + rewards_ave3) / (self.bn + 1)
         self.bn += 1
-
 
         loss = ls3
 
