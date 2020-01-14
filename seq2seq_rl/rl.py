@@ -281,9 +281,6 @@ class LossBiafRL(nn.Module):
 
         oris_s = [' '.join(i) for i in oris]
 
-        print(oris_s[0].decode('utf-8'))
-        print(preds_s[0].decode('utf-8'))
-
         message = {'refs': oris_s,
                    'cands': preds_s}
         json_massage = json.dumps(message)

@@ -123,22 +123,22 @@ def main():
 
     while True:
         connection, client_address = sock.accept()
-        while True:
-            try:
-                # get data
-                data = connection.recv(1024000)
-                if data:
-                    json_data = json.loads(data)
-                    refs = json_data['refs']
-                    cands = json_data['cands']
-                    P, R, F = get_bertscore(bs_model, bs_tokenizer, bs_idf_dict, refs, cands)
-                    ppls = get_ppl(ppl_enc, ppl_model, cands, language_code)
-                    connection.sendall(json.dumps({'bertscore': F.numpy().tolist(),
-                                                   'ppl': ppls}).encode('utf-8'))
-                else:
-                    break
-            finally:
-                connection.close()
+        try:
+            # get data
+            data = connection.recv(1024000)
+            if data:
+                json_data = json.loads(data)
+                refs = json_data['refs']
+                cands = json_data['cands']
+                P, R, F = get_bertscore(bs_model, bs_tokenizer, bs_idf_dict, refs, cands)
+                ppls = get_ppl(ppl_enc, ppl_model, cands, language_code)
+                connection.sendall(json.dumps({'bertscore': F.numpy().tolist(),
+                                               'ppl': ppls}).encode('utf-8'))
+                torch.cuda.empty_cache()
+            else:
+                break
+        finally:
+            connection.close()
 
 
 if __name__ == '__main__':
