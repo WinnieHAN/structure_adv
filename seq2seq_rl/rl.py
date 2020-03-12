@@ -3,16 +3,13 @@ import numpy as np
 import torch.nn as nn
 import torch, os, codecs
 import socket
-import json
+
 import global_variables
 # ref = [[1, 2, 3, 4, 5, 6]]
 # cnd = [1, 3, 4, 5, 6]
 # bleu = BLEU(ref, cnd)
 #
 # print('BLEU: %.4f%%' % (bleu * 100))
-
-#TODO(lwzhang) temporarily used hard code to sepcecify saved score file
-SCORE_PREFIX = '/hdd2/zhanglw/code/structure_adv/batch10_eval_'
 
 def get_bleu(out, dec_out, vocab_size):
     out = out.tolist()
@@ -117,8 +114,8 @@ class LossBiafRL1(nn.Module):
         return reward
 
     def write_text(self, ori_words, ori_words_length, sel, stc_length_out):
-        condsf = SCORE_PREFIX + 'cands.txt'
-        refs = SCORE_PREFIX + 'refs.txt'
+        condsf = global_variables.PREFIX + 'cands.txt'
+        refs = global_variables.PREFIX + 'refs.txt'
         oris = [[self.word_alphabet.get_instance(ori_words[si, wi]).encode('utf-8') for wi in range(1, ori_words_length[si])] for si in range(len(ori_words))]
         preds = [[self.word_alphabet.get_instance(sel[si, wi]).encode('utf-8') for wi in range(1, stc_length_out[si])] for si in range(len(sel))]
 
@@ -218,7 +215,7 @@ class LossBiafRL1(nn.Module):
         stc_length_seq = sel.shape[1]
         batch = sel.shape[0]
         self.write_text(ori_words, ori_words_length, sel, stc_length_out)
-        os.system('/hdd2/zhanglw/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bert_score.py --prefix ' + SCORE_PREFIX)
+        # os.system('/hdd2/zhanglw/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bert_score.py --prefix ' + global_variables.PREFIX)
         meaning_preservation = np.loadtxt('temp.txt')
         rewards = meaning_preservation  # affect more
 
@@ -275,32 +272,35 @@ class LossBiafRL(nn.Module):
 
     def get_bertscore_ppl(self, ori_words, ori_words_length, sel, stc_length_out):
 
-        oris = [[self.word_alphabet.get_instance(ori_words[si, wi]).encode('utf-8') for wi in range(1, ori_words_length[si])] for si in range(len(ori_words))]
-        preds = [[self.word_alphabet.get_instance(sel[si, wi]).encode('utf-8') for wi in range(1, stc_length_out[si])] for si in range(len(sel))]
-        preds_s = [' '.join(i) for i in preds]
+        self.write_text(ori_words, ori_words_length, sel, stc_length_out)
 
-        oris_s = [' '.join(i) for i in oris]
-
-        message = {'refs': oris_s,
-                   'cands': preds_s}
-        json_massage = json.dumps(message)
+        message = 'calculate'
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect(('localhost', self.port))
-        sock.sendall(json_massage.encode('utf-8'))
+        sock.sendall(message)
 
-        rec_data = sock.recv(102400)
-        byte_res = rec_data
+        rec_data = sock.recv(1024)
+        # byte_res = rec_data
         # while len(rec_data) == 0:
         #     rec_data = self.sock.recv(102400)
         #     byte_res += rec_data
-        json_data = json.loads(byte_res)
+        # received = json.loads(rec_data)
         sock.close()
-        return json_data['bertscore'], json_data['ppl']
+        if rec_data == 'done':
+            meaning_preservation = np.loadtxt(global_variables.PREFIX + 'temp.txt')
+            logppl = np.loadtxt(global_variables.PREFIX + 'temp_ppl.txt')
+            os.remove(global_variables.PREFIX + 'temp_ppl.txt')
+            os.remove(global_variables.PREFIX + 'temp.txt')
+            os.remove(global_variables.PREFIX + 'cands.txt')
+            os.remove(global_variables.PREFIX + 'refs.txt')
+            return meaning_preservation, logppl
+        else:
+            raise ValueError('server error!')
 
 
     def write_text(self, ori_words, ori_words_length, sel, stc_length_out):
-        condsf = SCORE_PREFIX + 'cands.txt'
-        refs = SCORE_PREFIX + 'refs.txt'
+        condsf = global_variables.PREFIX + 'cands.txt'
+        refs = global_variables.PREFIX + 'refs.txt'
         oris = [[self.word_alphabet.get_instance(ori_words[si, wi]).encode('utf-8') for wi in range(1, ori_words_length[si])] for si in range(len(ori_words))]
         preds = [[self.word_alphabet.get_instance(sel[si, wi]).encode('utf-8') for wi in range(1, stc_length_out[si])] for si in range(len(sel))]
 

@@ -101,7 +101,7 @@ def main():
     args_parser.add_argument('--z3_weight', type=float, default=1.0, help='reward weight of z3')
     args_parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
     args_parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
-
+    args_parser.add_argument('--prefix', type=str, default='/home/zhanglw/code/structure_adv/test_')
     args = args_parser.parse_args()
 
     logger = get_logger("GraphParser")
@@ -157,6 +157,9 @@ def main():
     global_variables.Z3_REWARD_WEIGHT = args.z3_weight
     global_variables.MP_REWARD_WEIGHT = args.mp_weight
     global_variables.PPL_REWARD_WEIGHT = args.ppl_weight
+
+    global_variables.PREFIX = args.prefix
+    SCORE_PREFIX = args.prefix.split('/')[-1]
 
     use_pos = args.pos
     pos_dim = args.pos_dim
@@ -296,9 +299,9 @@ def main():
     num_batches = num_data / batch_size + 1
 
     if args.treebank == 'ptb':
-        network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))  # TODO: 10.7
+        network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))
     elif args.treebank == 'ctb':
-        network.load_state_dict(torch.load('ctb_models/parsing/biaffine/network.pt'))  # TODO: 10.7
+        network.load_state_dict(torch.load('ctb_models/parsing/biaffine/network.pt'))
     network.to(device)
 
     shared_word_embedd = network.return_word_embedd()

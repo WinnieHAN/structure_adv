@@ -4,3 +4,6 @@ Z2_REWARD_WEIGHT = None
 Z3_REWARD_WEIGHT = None
 MP_REWARD_WEIGHT = None
 PPL_REWARD_WEIGHT = None
+
+# prefix for the tmp file
+PREFIX = None

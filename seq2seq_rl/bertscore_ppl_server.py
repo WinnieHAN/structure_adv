@@ -10,11 +10,11 @@ from bert_score.utils import lang2model, model2layers, bert_cos_score_idf
 from transformers import AutoModel, AutoTokenizer
 import socket
 
-import json
 import argparse
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer
 import torch
 from collections import defaultdict
+import numpy as np
 
 bertscore_models = {'en': root_path + '/pretrained_model_bert',
                     'zh': root_path + '/pretrained_model_bert_zh'}
@@ -106,10 +106,12 @@ def main():
     args_parser = argparse.ArgumentParser(description='Get bertscore and ppl score')
     args_parser.add_argument('--port', type=int, required=True, help='socket server')
     args_parser.add_argument('--language_code', type=str, default='en')
+    args_parser.add_argument('--prefix', type=str, required=True, help='prefix for save temp')
     args = args_parser.parse_args()
 
     port = args.port
     language_code = args.language_code
+    SCORE_PREFIX = args.prefix
 
     # pare bert score model and ppl model
     bs_model, bs_tokenizer, bs_idf_dict = pre_bertscore(language_code)
@@ -125,15 +127,19 @@ def main():
         connection, client_address = sock.accept()
         try:
             # get data
-            data = connection.recv(1024000)
+            data = connection.recv(1024)
             if data:
-                json_data = json.loads(data)
-                refs = json_data['refs']
-                cands = json_data['cands']
+                with open(SCORE_PREFIX + "cands.txt", encoding='utf8') as f:  # cands.txt
+                    cands = [line.strip() for line in f]
+                with open(SCORE_PREFIX + "refs.txt", encoding='utf8') as f:
+                    refs = [line.strip() for line in f]
+
                 P, R, F = get_bertscore(bs_model, bs_tokenizer, bs_idf_dict, refs, cands)
                 ppls = get_ppl(ppl_enc, ppl_model, cands, language_code)
-                connection.sendall(json.dumps({'bertscore': F.numpy().tolist(),
-                                               'ppl': ppls}).encode('utf-8'))
+                np.savetxt(SCORE_PREFIX + 'temp.txt', F.cpu().numpy())
+                np.savetxt(SCORE_PREFIX + 'temp_ppl.txt', np.array(ppls))
+
+                connection.sendall(b'done')
                 torch.cuda.empty_cache()
             else:
                 break
