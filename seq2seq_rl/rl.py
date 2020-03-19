@@ -392,4 +392,9 @@ class LossBiafRL(nn.Module):
         # print('ppl: ', np.average(ppl))
 
         # loss = ls1
-        return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(rewards_z3), np.average(meaning_preservation), np.average(ppl) #loss, ls, ls1, bleu, bleu1
+        return loss, \
+               np.average(rewards_z1) * global_variables.Z1_REWARD_WEIGHT, \
+               np.average(rewards_z2) * global_variables.Z2_REWARD_WEIGHT, \
+               np.average(rewards_z3) * global_variables.Z3_REWARD_WEIGHT, \
+               np.average(meaning_preservation) * global_variables.MP_REWARD_WEIGHT, \
+               np.average(ppl) * global_variables.PPL_REWARD_WEIGHT #loss, ls, ls1, bleu, bleu1

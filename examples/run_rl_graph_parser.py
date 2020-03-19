@@ -372,17 +372,17 @@ def main():
         # elif args.treebank == 'ctb':
         #     batch_size = 10
         # num_batches = 0
-        print('num_batches: ', str(num_batches))
+
         for kkk in range(1, num_batches + 1):  # range(1, 1):
             # print('---'+str(kkk)+'---')
             # train_rl
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
             inp = word
-            print("Batch " + str(kkk) + " Size: " + str(inp.size()))
-            if inp.size()[1] >= 140:
-                print("Skip batch not smaller than 140")
-                continue
-            if True:  # inp.size()[1]<15:#True:  #inp.size()[1]<15: #TODO: debug hanwj
+            # print("Batch " + str(kkk) + " Size: " + str(inp.size()))
+            # if inp.size()[1] >= 140:
+            #     print("Skip batch not smaller than 140")
+            #     continue
+            if True:  # inp.size()[1]<15:#True:  #inp.size()[1]<15:
                 decode = network.decode_mst
                 _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
                 sel1 = sel.data.detach()
@@ -446,6 +446,9 @@ def main():
                 rewards3 += reward3
                 rewards4 += reward4
                 rewards5 += reward5
+
+                if kkk % 100 == 0 and kkk != 0:
+                    torch.cuda.empty_cache()
         if True:
             print('train loss: ', ls_rl_ep)
             print('train reward parser b: ', rewards1)
@@ -485,12 +488,12 @@ def main():
             token_num = 0
             kk = 0
             # batch_size_for_eval = 1
-            print("Ignore the eval part....")
+
             for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
-                continue
+
                 kk += 1
                 print('-------' + str(kk) + '-------')
-                # if kk > 10:  # TODO:8.9
+                # if kk > 10:
                 #     break
                 word, char, pos, heads, types, masks, lengths = batch
                 print(lengths)
@@ -498,8 +501,7 @@ def main():
                 sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
                 end_position = torch.eq(sel, END_token).nonzero()
                 masks_sel = torch.ones_like(sel, dtype=torch.float)
-                lengths_sel = torch.ones_like(lengths).fill_(
-                    sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
                 if not len(end_position) == 0:
                     ij_back = -1
                     for ij in end_position:
