@@ -77,7 +77,7 @@ def get_ppl(enc, model, cands, language_code):
                     ppls.append(0)
                     print('space sentence')
                     continue
-                s = enc.encode(s)  # + [50256]  #50256 is the token_id for <|endoftext|>
+                s = enc.encode(s)  + [50256]  #50256 is the token_id for <|endoftext|>
                 batch = torch.tensor([s]).to(device)
                 # print(batch)
                 loss = model(batch, lm_labels=batch)  # everage -logp
