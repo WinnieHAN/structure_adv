@@ -161,6 +161,8 @@ def main():
     global_variables.PREFIX = args.prefix
     SCORE_PREFIX = args.prefix.split('/')[-1]
 
+    parser_select = ['stackPtr', 'stackPtr']
+
     use_pos = args.pos
     pos_dim = args.pos_dim
     word_dict, word_dim = utils.load_embedding_dict(word_embedding, word_path)
@@ -323,28 +325,54 @@ def main():
         network.to(device)
 
     # import third_party_parser
-    sudo_golden_parser = third_party_parser(device, word_table, char_table, 0, args)
-    sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, 1, args)
-    sudo_golden_parser.eval()
-    sudo_golden_parser_1.eval()
+    if parser_select[0] == 'stackPtr':
+        sudo_golden_parser = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr/')
+        sudo_golden_parser.eval()
+        bist_parser = None
+    elif parser_select[0] == 'bist':
+        sudo_golden_parser = None
+        if args.treebank == 'ptb':
+            params = 'bist_parser/pretrained/model1/params.pickle'
+            external_embedding = 'bist_parser/sskip.100.vectors'
+            model = 'bist_parser/pretrained/model1/barchybrid.model30'
+        elif args.treebank == 'ctb':
+            params = 'bist_parser/ctb_output/params.pickle'
+            external_embedding = 'bist_parser/sskip.chn.50'
+            model = 'bist_parser/ctb_output/barchybrid.model30'
+        else:
+            raise ValueError('treebank should be ptb or ctb')
 
-    if args.treebank == 'ptb':
-        params = 'bist_parser/pretrained/model1/params.pickle'
-        external_embedding = 'bist_parser/sskip.100.vectors'
-        model = 'bist_parser/pretrained/model1/barchybrid.model30'
-    elif args.treebank == 'ctb':
-        params = 'bist_parser/ctb_output/params.pickle'
-        external_embedding = 'bist_parser/sskip.chn.50'
-        model = 'bist_parser/ctb_output/barchybrid.model30'
-    else:
-        raise ValueError('treebank should be ptb or ctb')
+        with open(params, 'r') as paramsfp:
+            words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
 
-    with open(params, 'r') as paramsfp:
-        words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
+        stored_opt.external_embedding = external_embedding
+        bist_parser = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
+        bist_parser.Load(model)
 
-    stored_opt.external_embedding = external_embedding
-    bist_parser = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
-    bist_parser.Load(model)
+    if parser_select[1] == 'stackPtr':
+        sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr/')
+        sudo_golden_parser_1.eval()
+        bist_parser_1 = None
+    elif parser_select[0] == 'bist':
+        sudo_golden_parser_1 = None
+
+        if args.treebank == 'ptb':
+            params = 'bist_parser/pretrained/model2/params.pickle'
+            external_embedding = 'bist_parser/sskip.100.vectors'
+            model = 'bist_parser/pretrained/model2/barchybrid.model30'
+        elif args.treebank == 'ctb':
+            params = 'bist_parser/ctb_output/params.pickle'
+            external_embedding = 'bist_parser/sskip.chn.50'
+            model = 'bist_parser/ctb_output/barchybrid.model30'
+        else:
+            raise ValueError('treebank should be ptb or ctb')
+
+        with open(params, 'r') as paramsfp:
+            words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
+
+        stored_opt.external_embedding = external_embedding
+        bist_parser_1 = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
+        bist_parser_1.Load(model)
 
     M = 1  # this is the size of beam searching ?
     seq2seq.emb.weight.requires_grad = False
@@ -356,8 +384,6 @@ def main():
     seq2seq.to(device)
     # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))  # TODO: 7.13
     network.to(device)
-
-    parser_select = ['stackPtr0', 'bist']
 
     for epoch_i in range(0, num_epochs):
         print('=======' + str(epoch_i) + '=========')
@@ -390,7 +416,7 @@ def main():
                     end_position = torch.eq(sel1, END_token).nonzero()
                 except RuntimeError:
                     continue
-                    print(sel1)
+
                 masks_sel = torch.ones_like(sel1, dtype=torch.float)
                 lengths_sel = torch.ones_like(lengths).fill_(
                     sel1.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
@@ -412,21 +438,29 @@ def main():
                         print('IndexError Maybe: ', sel1.data.cpu().numpy())
                         print(masks_sel)
                         continue
-                    if 'stackPtr0' in parser_select:
+
+                    if 'stackPtr' == parser_select[0]:
                         sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel1, None, None, masks_sel,
-                                                                                      lengths_sel,
-                                                                                      beam=1)  # beam=1 ?? it should be equal to M TODO:
-                    if 'stackPtr1' in parser_select:
-                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel1, None, None, masks_sel,
-                                                                                            lengths_sel,
-                                                                                            beam=1)  # beam=1 ?? it should be equal to M TODO:
-                    elif 'bist' in parser_select:
+                                                                                      lengths_sel, beam=1)
+                    elif 'bist' == parser_select[0]:
                         str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
                                    one_stc in sel1.cpu().numpy()]
-                        stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                        stc_pred = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                        sudo_heads_pred = np.array(
+                            [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
+                             stc in stc_pred])
+
+                    if 'stackPtr' == parser_select[1]:
+                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel1, None, None, masks_sel,
+                                                                                      lengths_sel, beam=1)
+                    elif 'bist' == parser_select[1]:
+                        str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                                   one_stc in sel1.cpu().numpy()]
+                        stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
                         sudo_heads_pred_1 = np.array(
                             [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
                              stc in stc_pred_1])
+
                 ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                                      golden_out=heads,
                                                                                      mask_id=END_token,
@@ -434,7 +468,7 @@ def main():
                                                                                      sudo_golden_out=sudo_heads_pred,
                                                                                      sudo_golden_out_1=sudo_heads_pred_1,
                                                                                      ori_words=word,
-                                                                                     ori_words_length=lengths)  # sudo_heads_pred_1 TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                                                                                     ori_words_length=lengths)
                 optim_bia_rl.zero_grad()
                 ls_rl_bh.backward()
                 optim_bia_rl.step()

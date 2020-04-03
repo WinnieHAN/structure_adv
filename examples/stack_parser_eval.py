@@ -11,35 +11,22 @@ import os
 sys.path.append(".")
 sys.path.append("..")
 
-import time
-import argparse
 import uuid
 import json
 
-import numpy as np
 import torch
-from torch.nn.utils import clip_grad_norm_
-from torch.optim import Adam, SGD, Adamax
-from neuronlp2.io import get_logger, conllx_stacked_data
+from neuronlp2.io import conllx_stacked_data
 from neuronlp2.models import StackPtrNet
-from neuronlp2 import utils
-from neuronlp2.io import CoNLLXWriter
-from neuronlp2.tasks import parser
-from neuronlp2.nn.utils import freeze_embedding
 import torch.nn as nn
 
 uid = uuid.uuid4().hex[:6]
 
 
 class third_party_parser(nn.Module):
-    def __init__(self, device, word_table, char_table, model_id, args):
+    def __init__(self, device, word_table, char_table, model_path):
         super(third_party_parser, self).__init__()
         # mode = args.mode
         # if model_id==0 and args.treebank == 'ptb':
-        if args.treebank == 'ptb':
-            model_path = "models/parsing/stack_ptr/"  # args.model_path
-        elif args.treebank == 'ctb':
-            model_path = "ctb_models/parsing/stack_ptr/"  # args.model_path
         model_name = 'network.pt'  # args.model_name
 
         model_name = os.path.join(model_path, model_name)
