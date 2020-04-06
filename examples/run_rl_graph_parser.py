@@ -350,7 +350,7 @@ def main():
         bist_parser.Load(model)
 
     if parser_select[1] == 'stackPtr':
-        sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr/')
+        sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr1/')
         sudo_golden_parser_1.eval()
         bist_parser_1 = None
     elif parser_select[0] == 'bist':
@@ -452,7 +452,7 @@ def main():
 
                     if 'stackPtr' == parser_select[1]:
                         sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel1, None, None, masks_sel,
-                                                                                      lengths_sel, beam=1)
+                                                                                            lengths_sel, beam=1)
                     elif 'bist' == parser_select[1]:
                         str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
                                    one_stc in sel1.cpu().numpy()]
@@ -547,19 +547,28 @@ def main():
                     heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel,
                                                     length=lengths_sel,
                                                     leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                    if 'stackPtr0' in parser_select:
-                        sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
-                                                                                      lengths_sel, beam=1)  # beam=1 ?? it should be equal to M TODO:
-                    if 'stackPtr1' in parser_select:
-                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
-                                                                                            lengths_sel, beam=1)  # beam=1 ?? it should be equal to M TODO:
-                    elif 'bist' in parser_select:
-                        str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for one_stc in sel.cpu().numpy()]
-                        stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                    if 'stackPtr' == parser_select[0]:
+                        sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel1, None, None, masks_sel,
+                                                                                      lengths_sel, beam=1)
+                    elif 'bist' == parser_select[0]:
+                        str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                                   one_stc in sel1.cpu().numpy()]
+                        stc_pred = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                        sudo_heads_pred = np.array(
+                            [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
+                             stc in stc_pred])
+
+                    if 'stackPtr' == parser_select[1]:
+                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel1, None, None, masks_sel,
+                                                                                            lengths_sel, beam=1)
+                    elif 'bist' == parser_select[1]:
+                        str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                                   one_stc in sel1.cpu().numpy()]
+                        stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
                         sudo_heads_pred_1 = np.array(
-                            [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
-                             stc
-                             in stc_pred_1])
+                            [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
+                             stc in stc_pred_1])
+
                 ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                                      golden_out=heads,
                                                                                      mask_id=END_token,
