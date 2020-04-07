@@ -161,7 +161,7 @@ def main():
     global_variables.PREFIX = args.prefix
     SCORE_PREFIX = args.prefix.split('/')[-1]
 
-    parser_select = ['stackPtr', 'stackPtr']
+    parser_select = ['biaffine', 'biaffine']
 
     use_pos = args.pos
     pos_dim = args.pos_dim
@@ -349,6 +349,18 @@ def main():
         bist_parser = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
         bist_parser.Load(model)
 
+    elif parser_select[0] == 'biaffine':
+        biaffine_parser = BiRecurrentConvBiAffine(word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters,
+                                                  window, mode, hidden_size, num_layers, num_types, arc_space, type_space,
+                                                  embedd_word=word_table, embedd_char=char_table,p_in=p_in, p_out=p_out,
+                                                  p_rnn=p_rnn, biaffine=True, pos=use_pos, char=use_char)
+        if freeze:
+            freeze_embedding(biaffine_parser.word_embedd)
+
+        biaffine_parser = biaffine_parser.to(device)
+        biaffine_parser.load_state_dict(torch.load('models/parsing/biaffine1/network.pt'))
+        biaffine_parser.eval()
+
     if parser_select[1] == 'stackPtr':
         sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr1/')
         sudo_golden_parser_1.eval()
@@ -373,6 +385,18 @@ def main():
         stored_opt.external_embedding = external_embedding
         bist_parser_1 = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
         bist_parser_1.Load(model)
+
+    elif parser_select[1] == 'biaffine':
+        biaffine_parser_1 = BiRecurrentConvBiAffine(word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters,
+                                                  window, mode, hidden_size, num_layers, num_types, arc_space, type_space,
+                                                  embedd_word=word_table, embedd_char=char_table,p_in=p_in, p_out=p_out,
+                                                  p_rnn=p_rnn, biaffine=True, pos=use_pos, char=use_char)
+        if freeze:
+            freeze_embedding(biaffine_parser_1.word_embedd)
+
+        biaffine_parser_1 = biaffine_parser_1.to(device)
+        biaffine_parser_1.load_state_dict(torch.load('models/parsing/biaffine2/network.pt'))
+        biaffine_parser_1.eval()
 
     M = 1  # this is the size of beam searching ?
     seq2seq.emb.weight.requires_grad = False
@@ -449,6 +473,11 @@ def main():
                         sudo_heads_pred = np.array(
                             [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
                              stc in stc_pred])
+                    elif parser_select[0] == 'biaffine':
+                        sudo_heads_pred, _ = biaffine_parser.decode_mst(sel1, input_char=None, input_pos=None, mask=masks_sel,
+                                                        length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                    else:
+                        raise ValueError('Error first parser select code!')
 
                     if 'stackPtr' == parser_select[1]:
                         sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel1, None, None, masks_sel,
@@ -460,6 +489,11 @@ def main():
                         sudo_heads_pred_1 = np.array(
                             [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
                              stc in stc_pred_1])
+                    elif parser_select[1] == 'biaffine':
+                        sudo_heads_pred_1, _ = biaffine_parser_1.decode_mst(sel1, input_char=None, input_pos=None, mask=masks_sel,
+                                                        length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                    else:
+                        raise ValueError('Error second parser select code!')
 
                 ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                                      golden_out=heads,
@@ -557,6 +591,11 @@ def main():
                         sudo_heads_pred = np.array(
                             [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
                              stc in stc_pred])
+                    elif parser_select[0] == 'biaffine':
+                        sudo_heads_pred, _ = biaffine_parser.decode_mst(sel1, input_char=None, input_pos=None, mask=masks_sel,
+                                                        length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                    else:
+                        raise ValueError('Error first parser select code!')
 
                     if 'stackPtr' == parser_select[1]:
                         sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel1, None, None, masks_sel,
@@ -568,6 +607,12 @@ def main():
                         sudo_heads_pred_1 = np.array(
                             [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
                              stc in stc_pred_1])
+                    elif parser_select[1] == 'biaffine':
+                        sudo_heads_pred_1, _ = biaffine_parser_1.decode_mst(sel1, input_char=None, input_pos=None, mask=masks_sel,
+                                                        length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                    else:
+                        raise ValueError('Error second parser select code!')
+
 
                 ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                                      golden_out=heads,
