@@ -556,15 +556,14 @@ def main():
             token_num = 0
             kk = 0
             # batch_size_for_eval = 1
-
             for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
 
                 kk += 1
-                print('-------' + str(kk) + '-------')
+                # print('-------' + str(kk) + '-------')
                 # if kk > 10:
                 #     break
                 word, char, pos, heads, types, masks, lengths = batch
-                print(lengths)
+                # print(lengths)
                 inp = word  # , _ = seq2seq.add_noise(word, lengths)
                 sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
                 end_position = torch.eq(sel, END_token).nonzero()
@@ -582,33 +581,33 @@ def main():
                                                     length=lengths_sel,
                                                     leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                     if 'stackPtr' == parser_select[0]:
-                        sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel1, None, None, masks_sel,
+                        sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
                                                                                       lengths_sel, beam=1)
                     elif 'bist' == parser_select[0]:
                         str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                                   one_stc in sel1.cpu().numpy()]
+                                   one_stc in sel.cpu().numpy()]
                         stc_pred = list(bist_parser.predict_stcs(str_sel, lengths_sel))
                         sudo_heads_pred = np.array(
-                            [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
+                            [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
                              stc in stc_pred])
                     elif parser_select[0] == 'biaffine':
-                        sudo_heads_pred, _ = biaffine_parser.decode_mst(sel1, input_char=None, input_pos=None, mask=masks_sel,
+                        sudo_heads_pred, _ = biaffine_parser.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
                                                         length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                     else:
                         raise ValueError('Error first parser select code!')
 
                     if 'stackPtr' == parser_select[1]:
-                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel1, None, None, masks_sel,
+                        sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
                                                                                             lengths_sel, beam=1)
                     elif 'bist' == parser_select[1]:
                         str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                                   one_stc in sel1.cpu().numpy()]
+                                   one_stc in sel.cpu().numpy()]
                         stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
                         sudo_heads_pred_1 = np.array(
-                            [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
+                            [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
                              stc in stc_pred_1])
                     elif parser_select[1] == 'biaffine':
-                        sudo_heads_pred_1, _ = biaffine_parser_1.decode_mst(sel1, input_char=None, input_pos=None, mask=masks_sel,
+                        sudo_heads_pred_1, _ = biaffine_parser_1.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
                                                         length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                     else:
                         raise ValueError('Error second parser select code!')
@@ -633,7 +632,7 @@ def main():
                 rewards5 += reward5
                 sel = sel.detach().cpu().numpy()
                 lengths_sel = lengths_sel.detach().cpu().numpy()
-                print(sel)
+                # print(sel)
                 pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
                 src_writer_test.write_stc(word, lengths, symbolic_root=True)
 
