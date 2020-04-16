@@ -223,9 +223,9 @@ def main():
     print(seq2seq)
 
     # load pretrained model
-    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
+    seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + args.prefix + '.pt'))
     seq2seq.to(device)
-    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
+    network.load_state_dict(torch.load(args.rl_finetune_network_load_path + args.prefix + '.pt'))
     network.to(device)
 
     # import third parser
