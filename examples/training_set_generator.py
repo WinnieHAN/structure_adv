@@ -88,11 +88,12 @@ def main():
     args_parser.add_argument('--z3_weight', type=float, default=1.0, help='reward weight of z3')
     args_parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
     args_parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
-    args_parser.add_argument('--prefix', type=str, default='/home/zhanglw/code/structure_adv/test_')
+    args_parser.add_argument('--prefix', type=str, default='')
     args = args_parser.parse_args()
 
     logger = get_logger("Sentence Generator")
 
+    parser_select = ['stackPtr', 'bist']
 
     mode = args.mode
     obj = args.objective
@@ -228,19 +229,76 @@ def main():
     network.load_state_dict(torch.load(args.rl_finetune_network_load_path + args.prefix + '.pt'))
     network.to(device)
 
-    # import third parser
-    sudo_golden_parser = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr/')
-    sudo_golden_parser.eval()
+    # import third_party_parser
+    if parser_select[0] == 'stackPtr':
+        sudo_golden_parser = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr/')
+        sudo_golden_parser.eval()
+        bist_parser = None
+    elif parser_select[0] == 'bist':
+        sudo_golden_parser = None
+        if args.treebank == 'ptb':
+            params = 'bist_parser/pretrained/model1/params.pickle'
+            external_embedding = 'bist_parser/sskip.100.vectors'
+            model = 'bist_parser/pretrained/model1/barchybrid.model30'
+        elif args.treebank == 'ctb':
+            params = 'bist_parser/ctb_output/params.pickle'
+            external_embedding = 'bist_parser/sskip.chn.50'
+            model = 'bist_parser/ctb_output/barchybrid.model30'
+        else:
+            raise ValueError('treebank should be ptb or ctb')
 
-    params = 'bist_parser/pretrained/model1/params.pickle'
-    external_embedding = 'bist_parser/sskip.100.vectors'
-    model = 'bist_parser/pretrained/model1/barchybrid.model30'
+        with open(params, 'r') as paramsfp:
+            words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
 
-    with open(params, 'r') as paramsfp:
-        words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
-    stored_opt.external_embedding = external_embedding
-    bist_parser_1 = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
-    bist_parser_1.Load(model)
+        stored_opt.external_embedding = external_embedding
+        bist_parser = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
+        bist_parser.Load(model)
+
+    elif parser_select[0] == 'biaffine':
+        biaffine_parser = BiRecurrentConvBiAffine(word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters,
+                                                  window, mode, hidden_size, num_layers, num_types, arc_space, type_space,
+                                                  embedd_word=word_table, embedd_char=char_table,p_in=0.0, p_out=0.0,
+                                                  p_rnn=[0.0, 0.0], biaffine=True, pos=use_pos, char=use_char)
+
+        biaffine_parser = biaffine_parser.to(device)
+        biaffine_parser.load_state_dict(torch.load('models/parsing/biaffine1/network.pt'))
+        biaffine_parser.eval()
+
+    if parser_select[1] == 'stackPtr':
+        sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr1/')
+        sudo_golden_parser_1.eval()
+        bist_parser_1 = None
+    elif parser_select[1] == 'bist':
+        sudo_golden_parser_1 = None
+
+        if args.treebank == 'ptb':
+            params = 'bist_parser/pretrained/model1/params.pickle'
+            external_embedding = 'bist_parser/sskip.100.vectors'
+            model = 'bist_parser/pretrained/model1/barchybrid.model30'
+        elif args.treebank == 'ctb':
+            params = 'bist_parser/ctb_output/params.pickle'
+            external_embedding = 'bist_parser/sskip.chn.50'
+            model = 'bist_parser/ctb_output/barchybrid.model30'
+        else:
+            raise ValueError('treebank should be ptb or ctb')
+
+        with open(params, 'r') as paramsfp:
+            words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
+
+        stored_opt.external_embedding = external_embedding
+        bist_parser_1 = ArcHybridLSTM(words, pos, rels, w2i, stored_opt)
+        bist_parser_1.Load(model)
+
+    elif parser_select[1] == 'biaffine':
+        biaffine_parser_1 = BiRecurrentConvBiAffine(word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters,
+                                                  window, mode, hidden_size, num_layers, num_types, arc_space, type_space,
+                                                  embedd_word=word_table, embedd_char=char_table,p_in=0.0, p_out=0.0,
+                                                  p_rnn=[0.0, 0.0], biaffine=True, pos=use_pos, char=use_char)
+
+        biaffine_parser_1 = biaffine_parser_1.to(device)
+        biaffine_parser_1.load_state_dict(torch.load('models/parsing/biaffine2/network.pt'))
+        biaffine_parser_1.eval()
+
 
     # Begin generate
 
@@ -269,14 +327,42 @@ def main():
             # current parsing result
             heads_pred, types_pred = network.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
                                                         length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-            # parser b result
-            sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel, lengths_sel, beam=1)
-            # parser c result
-            str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for one_stc in sel.cpu().numpy()]
-            stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
-            sudo_heads_pred_1 = np.array([[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for stc in stc_pred_1])
+            if 'stackPtr' == parser_select[0]:
+                sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
+                                                                              lengths_sel, beam=1)
+            elif 'bist' == parser_select[0]:
+                str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                           one_stc in sel.cpu().numpy()]
+                stc_pred = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                sudo_heads_pred = np.array(
+                    [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
+                     stc in stc_pred])
+            elif parser_select[0] == 'biaffine':
+                sudo_heads_pred, _ = biaffine_parser.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
+                                                                length=lengths_sel,
+                                                                leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+            else:
+                raise ValueError('Error first parser select code!')
 
-            np_sel = sel.cpu().numpy()
+            if 'stackPtr' == parser_select[1]:
+                sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
+                                                                                    lengths_sel, beam=1)
+            elif 'bist' == parser_select[1]:
+                str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                             one_stc in sel.cpu().numpy()]
+                stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
+                sudo_heads_pred_1 = np.array(
+                    [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
+                     stc in stc_pred_1])
+            elif parser_select[1] == 'biaffine':
+                sudo_heads_pred_1, _ = biaffine_parser_1.decode_mst(sel, input_char=None, input_pos=None,
+                                                                    mask=masks_sel,
+                                                                    length=lengths_sel,
+                                                                    leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+            else:
+                raise ValueError('Error second parser select code!')
+
+            # np_sel = sel.cpu().numpy()
             for i in range(batch[0].size()[0]):
                 # print("Different between parser A and parser B: \t"
                 #       + str(parse_diff(heads_pred[i], sudo_heads_pred[i], lengths_sel[i]))
@@ -298,10 +384,10 @@ def main():
                                            lengths_sel[i].item()))
                 else:
                     pass
-            if len(generation_res) > 10:
-                break
+            # if len(generation_res) > 10:
+            #     break
     # save generation result back to
-    save_path = 'data/ptb/gen.conllu'
+    save_path = 'data/ptb/gen' + args.prefix + '.conllu'
     writer = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
     writer.start(save_path)
     raw_sents = []
