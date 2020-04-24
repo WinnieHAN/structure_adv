@@ -101,6 +101,7 @@ def main():
     args_parser.add_argument('--z3_weight', type=float, default=1.0, help='reward weight of z3')
     args_parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
     args_parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
+    args_parser.add_argument('--unk_weight', type=float, default=100, help='reward weight of unk rate')
     args_parser.add_argument('--prefix', type=str, default='/home/zhanglw/code/structure_adv/test_')
     args = args_parser.parse_args()
 
@@ -157,11 +158,12 @@ def main():
     global_variables.Z3_REWARD_WEIGHT = args.z3_weight
     global_variables.MP_REWARD_WEIGHT = args.mp_weight
     global_variables.PPL_REWARD_WEIGHT = args.ppl_weight
+    global_variables.UNK_REWARD_WEIGHT = args.unk_weight
 
     global_variables.PREFIX = args.prefix
     SCORE_PREFIX = args.prefix.split('/')[-1]
 
-    parser_select = ['biaffine', 'biaffine']
+    parser_select = ['stackPtr', 'bist']
 
     use_pos = args.pos
     pos_dim = args.pos_dim
@@ -365,13 +367,13 @@ def main():
         sudo_golden_parser_1 = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr1/')
         sudo_golden_parser_1.eval()
         bist_parser_1 = None
-    elif parser_select[0] == 'bist':
+    elif parser_select[1] == 'bist':
         sudo_golden_parser_1 = None
 
         if args.treebank == 'ptb':
-            params = 'bist_parser/pretrained/model2/params.pickle'
+            params = 'bist_parser/pretrained/model1/params.pickle'
             external_embedding = 'bist_parser/sskip.100.vectors'
-            model = 'bist_parser/pretrained/model2/barchybrid.model30'
+            model = 'bist_parser/pretrained/model1/barchybrid.model30'
         elif args.treebank == 'ctb':
             params = 'bist_parser/ctb_output/params.pickle'
             external_embedding = 'bist_parser/sskip.chn.50'
@@ -411,11 +413,12 @@ def main():
 
     for epoch_i in range(0, num_epochs):
         print('=======' + str(epoch_i) + '=========')
-        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
+        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = rewards6 = 0
         network.eval()  # only train seq2seq
         seq2seq.train()
         seq2seq.emb.weight.requires_grad = False
         END_token = word_alphabet.instance2index['_PAD']  # word_alphabet.get_instance('_PAD)==1  '_END'==3
+        train_num = test_num = 0
         # num_batches =
         # if args.treebank == 'ptb':
         #     batch_size = 10
@@ -429,9 +432,9 @@ def main():
             word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
             inp = word
             # print("Batch " + str(kkk) + " Size: " + str(inp.size()))
-            # if inp.size()[1] >= 140:
-            #     print("Skip batch not smaller than 140")
-            #     continue
+            if inp.size()[1] >= 140:
+                print("Skip batch not smaller than 140")
+                continue
             if True:  # inp.size()[1]<15:#True:  #inp.size()[1]<15:
                 decode = network.decode_mst
                 _, sel, pb = seq2seq(inp.long().to(device), is_tr=True, M=M, LEN=inp.size()[1])
@@ -484,7 +487,7 @@ def main():
                                                                                             lengths_sel, beam=1)
                     elif 'bist' == parser_select[1]:
                         str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                                   one_stc in sel1.cpu().numpy()]
+                                     one_stc in sel1.cpu().numpy()]
                         stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
                         sudo_heads_pred_1 = np.array(
                             [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel1.shape[1] - len(stc))] for
@@ -495,7 +498,7 @@ def main():
                     else:
                         raise ValueError('Error second parser select code!')
 
-                ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
+                ls_rl_bh, reward1, reward2, reward3, reward4, reward5, reward6 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
                                                                                      golden_out=heads,
                                                                                      mask_id=END_token,
                                                                                      stc_length_out=lengths_sel,
@@ -509,30 +512,30 @@ def main():
                 ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh
                 # ls1 = ls1.cpu().detach().numpy()
-                rewards1 += reward1
-                rewards2 += reward2
-                rewards3 += reward3
-                rewards4 += reward4
-                rewards5 += reward5
+                rewards1 += reward1 * sel.shape[0]
+                rewards2 += reward2 * sel.shape[0]
+                rewards3 += reward3 * sel.shape[0]
+                rewards4 += reward4 * sel.shape[0]
+                rewards5 += reward5 * sel.shape[0]
+                rewards6 += reward6 * sel.shape[0]
 
-                if kkk % 100 == 0 and kkk != 0:
+                if kkk % 50 == 0 and kkk != 0:
                     torch.cuda.empty_cache()
+                train_num += sel.shape[0]
         if True:
             print('train loss: ', ls_rl_ep)
-            print('train reward parser b: ', rewards1)
-            print('train reward parser c: ', rewards2)
-            print('train reward parser b^c: ', rewards3)
-            print('train reward meaning: ', rewards4)
-            print('train reward fluency: ', rewards5)
+            print('train reward parser b: ', rewards1 / train_num)
+            print('train reward parser c: ', rewards2 / train_num)
+            print('train reward parser b^c: ', rewards3 / train_num)
+            print('train reward meaning: ', rewards4 / train_num)
+            print('train reward fluency: ', rewards5 / train_num)
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= decay_rate
 
         if epoch_i >= 0:
             print('Save models to' + args.rl_finetune_seq2seq_save_path)
-            torch.save(seq2seq.state_dict(),
-                       args.rl_finetune_seq2seq_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
-            torch.save(network.state_dict(),
-                       args.rl_finetune_network_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
+            torch.save(seq2seq.state_dict(),args.rl_finetune_seq2seq_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
+            torch.save(network.state_dict(), args.rl_finetune_network_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
 
         ####eval######
         seq2seq.eval()
@@ -601,7 +604,7 @@ def main():
                                                                                             lengths_sel, beam=1)
                     elif 'bist' == parser_select[1]:
                         str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                                   one_stc in sel.cpu().numpy()]
+                                     one_stc in sel.cpu().numpy()]
                         stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
                         sudo_heads_pred_1 = np.array(
                             [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
@@ -612,16 +615,16 @@ def main():
                     else:
                         raise ValueError('Error second parser select code!')
 
-
-                ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=heads_pred,
-                                                                                     golden_out=heads,
-                                                                                     mask_id=END_token,
-                                                                                     stc_length_out=lengths_sel,
-                                                                                     sudo_golden_out=sudo_heads_pred,
-                                                                                     sudo_golden_out_1=sudo_heads_pred_1,
-                                                                                     ori_words=word,
-                                                                                     ori_words_length=lengths
-                                                                                     )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                ls_rl_bh, reward1, reward2, reward3, reward4, reward5, reward6 = loss_biaf_rl(sel, pb,
+                                                                                              predicted_out=heads_pred,
+                                                                                              golden_out=heads,
+                                                                                              mask_id=END_token,
+                                                                                              stc_length_out=lengths_sel,
+                                                                                              sudo_golden_out=sudo_heads_pred,
+                                                                                              sudo_golden_out_1=sudo_heads_pred_1,
+                                                                                              ori_words=word,
+                                                                                              ori_words_length=lengths
+                                                                                              )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
 
                 ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh
@@ -630,11 +633,14 @@ def main():
                 rewards3 += reward3
                 rewards4 += reward4
                 rewards5 += reward5
+                rewards6 += reward6
                 sel = sel.detach().cpu().numpy()
                 lengths_sel = lengths_sel.detach().cpu().numpy()
                 # print(sel)
                 pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
                 src_writer_test.write_stc(word, lengths, symbolic_root=True)
+
+                test_num += sel.shape[0]
 
                 for i in range(len(lengths_sel)):
                     nll += sum(pb[i, 1:lengths_sel[i]])
@@ -642,11 +648,11 @@ def main():
             # nll /= token_num
 
         print('test loss: ', ls_rl_ep)
-        print('test reward parser b: ', rewards1)
-        print('test reward parser c: ', rewards2)
-        print('test reward parser b^c: ', rewards3)
-        print('test reward meaning: ', rewards4)
-        print('test reward fluency: ', rewards5)
+        print('test reward parser b: ', rewards1 / test_num)
+        print('test reward parser c: ', rewards2 / test_num)
+        print('test reward parser b^c: ', rewards3 / test_num)
+        print('test reward meaning: ', rewards4 / test_num)
+        print('test reward fluency: ', rewards5 / test_num)
 
         print('test nll: ', nll)
 

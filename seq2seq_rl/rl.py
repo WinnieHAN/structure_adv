@@ -263,6 +263,9 @@ class LossBiafRL(nn.Module):
 
         return reward
 
+    def get_unk_rate(self, sent, length):
+        return sent[:length].count(0) / float(length)
+
     def get_reward_same(self, out, dec_out, length_out, ori_words, ori_words_length):
         stc_dda = sum([1 if out[i] == dec_out[i] else 0 for i in range(1, length_out)])
 
@@ -318,11 +321,14 @@ class LossBiafRL(nn.Module):
 
 
     def forward(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out, sudo_golden_out_1, ori_words, ori_words_length):
+
+        list_stc_length_out = stc_length_out.cpu().numpy().tolist()
+
         ####1####
         batch = sel.shape[0]
         rewards_z1 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z1.append(reward)
         rewards_z1 = np.asarray(rewards_z1)
 
@@ -330,7 +336,7 @@ class LossBiafRL(nn.Module):
         batch = sel.shape[0]
         rewards_z2 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z2.append(reward)
         rewards_z2 = np.asarray(rewards_z2)
 
@@ -338,7 +344,7 @@ class LossBiafRL(nn.Module):
         batch = sel.shape[0]
         rewards_z3 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z3.append(reward)
         rewards_z3 = np.asarray(rewards_z3)
 
@@ -362,11 +368,20 @@ class LossBiafRL(nn.Module):
 
         #-----------------------------------------------
 
+        ###6### unk rate
+        unk_rewards = []
+        list_sel = sel.cpu().float().numpy().tolist()
+        for i in range(batch):
+            reward = self.get_unk_rate(list_sel[i], list_stc_length_out[i])
+            unk_rewards.append(-1 * reward)
+        unk_rewards = np.asarray(unk_rewards)
+
         rewards = (meaning_preservation * global_variables.MP_REWARD_WEIGHT +
                    ppl * global_variables.PPL_REWARD_WEIGHT +
                    rewards_z1 * global_variables.Z1_REWARD_WEIGHT +
                    rewards_z2 * global_variables.Z2_REWARD_WEIGHT +
-                   rewards_z3 * global_variables.Z3_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
+                   rewards_z3 * global_variables.Z3_REWARD_WEIGHT +
+                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
         # rewards = bleus_w * 10  # 8.26
 
         ls3 = 0
@@ -397,4 +412,5 @@ class LossBiafRL(nn.Module):
                np.average(rewards_z2) * global_variables.Z2_REWARD_WEIGHT, \
                np.average(rewards_z3) * global_variables.Z3_REWARD_WEIGHT, \
                np.average(meaning_preservation) * global_variables.MP_REWARD_WEIGHT, \
-               np.average(ppl) * global_variables.PPL_REWARD_WEIGHT #loss, ls, ls1, bleu, bleu1
+               np.average(ppl) * global_variables.PPL_REWARD_WEIGHT, \
+               np.average(unk_rewards) * global_variables.UNK_REWARD_WEIGHT #loss, ls, ls1, bleu, bleu1

@@ -85,12 +85,12 @@ class Seq2seq_Model(nn.Module):
 
                 if is_tr == True:
                     temp = nn.functional.softmax(out[:, 0, :], dim=1)
-                    dec_inp = torch.multinomial(temp, 1)  # (200, 1) TODO: hanwj. why here is [:,0,:].  every time we use the same tensor to softmax?
+                    dec_inp = torch.multinomial(temp, 1)
                 else:
                     dec_inp = torch.argmax(out, dim=2, keepdim=False)
                 sels.append(dec_inp)  # dec_inp: [200, 1]
 
-                pb = torch.gather(nn.functional.log_softmax(out, dim=2), 2, dec_inp.view((dec_inp.shape[0], 1, 1)))  # TODO: dec_inp ??
+                pb = torch.gather(nn.functional.log_softmax(out, dim=2), 2, dec_inp.view((dec_inp.shape[0], 1, 1)))
                 pb = pb.view((pb.shape[0], 1))  # pb: [200, 1]
                 pbs.append(pb)
 
