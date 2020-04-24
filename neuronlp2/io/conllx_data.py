@@ -379,6 +379,82 @@ def read_data_to_tensor(source_path, word_alphabet, char_alphabet, pos_alphabet,
 
     return data_tensor, bucket_sizes
 
+# used to read generated data and train data.
+def read_data_list_to_tensor(source_path_list, word_alphabet, char_alphabet, pos_alphabet, type_alphabet, max_size=None,
+                            normalize_digits=True, symbolic_root=False, symbolic_end=False, device=torch.device('cpu')):
+    data = []
+    for source_path in source_path_list:
+        data_raw, max_char_length = read_data(source_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet,
+                                          max_size=max_size, normalize_digits=normalize_digits,
+                                          symbolic_root=symbolic_root, symbolic_end=symbolic_end)
+        # mix data
+        if len(data) == 0:
+            data = data_raw
+        else:
+            for i in range(len(data)):
+                data[i] = data[i] + data_raw[i]
+
+    bucket_sizes = [len(data[b]) for b in range(len(_buckets))]
+
+    data_tensor = []
+
+    for bucket_id in range(len(_buckets)):
+        bucket_size = bucket_sizes[bucket_id]
+        if bucket_size == 0:
+            data_tensor.append((1, 1))
+            continue
+
+        bucket_length = _buckets[bucket_id]
+        char_length = min(utils.MAX_CHAR_LENGTH, max_char_length[bucket_id] + utils.NUM_CHAR_PAD)
+        wid_inputs = np.empty([bucket_size, bucket_length], dtype=np.int64)
+        cid_inputs = np.empty([bucket_size, bucket_length, char_length], dtype=np.int64)
+        pid_inputs = np.empty([bucket_size, bucket_length], dtype=np.int64)
+        hid_inputs = np.empty([bucket_size, bucket_length], dtype=np.int64)
+        tid_inputs = np.empty([bucket_size, bucket_length], dtype=np.int64)
+
+        masks = np.zeros([bucket_size, bucket_length], dtype=np.float32)
+        single = np.zeros([bucket_size, bucket_length], dtype=np.int64)
+
+        lengths = np.empty(bucket_size, dtype=np.int64)
+
+        for i, inst in enumerate(data[bucket_id]):
+            wids, cid_seqs, pids, hids, tids = inst
+            inst_size = len(wids)
+            lengths[i] = inst_size
+            # word ids
+            wid_inputs[i, :inst_size] = wids
+            wid_inputs[i, inst_size:] = PAD_ID_WORD
+            for c, cids in enumerate(cid_seqs):
+                cid_inputs[i, c, :len(cids)] = cids
+                cid_inputs[i, c, len(cids):] = PAD_ID_CHAR
+            cid_inputs[i, inst_size:, :] = PAD_ID_CHAR
+            # pos ids
+            pid_inputs[i, :inst_size] = pids
+            pid_inputs[i, inst_size:] = PAD_ID_TAG
+            # type ids
+            tid_inputs[i, :inst_size] = tids
+            tid_inputs[i, inst_size:] = PAD_ID_TAG
+            # heads
+            hid_inputs[i, :inst_size] = hids
+            hid_inputs[i, inst_size:] = PAD_ID_TAG
+            # masks
+            masks[i, :inst_size] = 1.0
+            for j, wid in enumerate(wids):
+                if word_alphabet.is_singleton(wid):
+                    single[i, j] = 1
+
+        words = torch.from_numpy(wid_inputs).to(device)
+        chars = torch.from_numpy(cid_inputs).to(device)
+        pos = torch.from_numpy(pid_inputs).to(device)
+        heads = torch.from_numpy(hid_inputs).to(device)
+        types = torch.from_numpy(tid_inputs).to(device)
+        masks = torch.from_numpy(masks).to(device)
+        single = torch.from_numpy(single).to(device)
+        lengths = torch.from_numpy(lengths).to(device)
+
+        data_tensor.append((words, chars, pos, heads, types, masks, single, lengths))
+
+    return data_tensor, bucket_sizes
 
 def get_batch_tensor(data, batch_size, unk_replace=0.):
     data_tensor, bucket_sizes = data

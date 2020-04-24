@@ -64,7 +64,7 @@ def main():
     args_parser.add_argument('--freeze', action='store_true', help='frozen the word embedding (disable fine-tuning).')
     args_parser.add_argument('--char_embedding', choices=['random', 'polyglot'], help='Embedding for characters', required=True)
     args_parser.add_argument('--char_path', help='path for character embedding dict')
-    args_parser.add_argument('--train')  # "data/POS-penn/wsj/split1/wsj1.train.original"
+    args_parser.add_argument('--train', action='append')  # "data/POS-penn/wsj/split1/wsj1.train.original"
     args_parser.add_argument('--dev')  # "data/POS-penn/wsj/split1/wsj1.dev.original"
     args_parser.add_argument('--test')  # "data/POS-penn/wsj/split1/wsj1.test.original"
     args_parser.add_argument('--model_path', help='path for saving model file.', required=True)
@@ -123,7 +123,8 @@ def main():
     logger.info("Creating Alphabets")
     alphabet_path = os.path.join(model_path, 'alphabets/')
     model_name = os.path.join(model_path, model_name)
-    word_alphabet, char_alphabet, pos_alphabet, type_alphabet = conllx_data.create_alphabets(alphabet_path, train_path, data_paths=[dev_path, test_path],
+    # here the train path is a list, thus we only use the origin to build alphabet
+    word_alphabet, char_alphabet, pos_alphabet, type_alphabet = conllx_data.create_alphabets(alphabet_path, train_path[0], data_paths=[dev_path, test_path],
                                                                                              max_vocabulary_size=100000, embedd_dict=word_dict)
 
     num_words = word_alphabet.size()
@@ -139,7 +140,7 @@ def main():
     logger.info("Reading Data")
     device = torch.device('cuda') if args.cuda else torch.device('cpu')
 
-    data_train = conllx_data.read_data_to_tensor(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet, symbolic_root=True, device=device)
+    data_train = conllx_data.read_data_list_to_tensor(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet, symbolic_root=True, device=device)
     # data_train = conllx_data.read_data(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
     # num_data = sum([len(bucket) for bucket in data_train])
     num_data = sum(data_train[1])
