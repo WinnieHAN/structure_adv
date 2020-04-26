@@ -529,6 +529,7 @@ def main():
             print('train reward parser b^c: ', rewards3 / train_num)
             print('train reward meaning: ', rewards4 / train_num)
             print('train reward fluency: ', rewards5 / train_num)
+            print('train UNK score: ', reward6 / train_num)
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= decay_rate
 
@@ -628,12 +629,12 @@ def main():
 
                 ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh
-                rewards1 += reward1
-                rewards2 += reward2
-                rewards3 += reward3
-                rewards4 += reward4
-                rewards5 += reward5
-                rewards6 += reward6
+                rewards1 += reward1 * sel.shape[0]
+                rewards2 += reward2 * sel.shape[0]
+                rewards3 += reward3 * sel.shape[0]
+                rewards4 += reward4 * sel.shape[0]
+                rewards5 += reward5 * sel.shape[0]
+                rewards6 += reward6 * sel.shape[0]
                 sel = sel.detach().cpu().numpy()
                 lengths_sel = lengths_sel.detach().cpu().numpy()
                 # print(sel)
@@ -653,6 +654,7 @@ def main():
         print('test reward parser b^c: ', rewards3 / test_num)
         print('test reward meaning: ', rewards4 / test_num)
         print('test reward fluency: ', rewards5 / test_num)
+        print('test UNK score: ', rewards6 / test_num)
 
         print('test nll: ', nll)
 
