@@ -224,9 +224,9 @@ def main():
     print(seq2seq)
 
     # load pretrained model
-    seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + args.prefix + '.pt'))
+    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + args.prefix + '.pt'))
     seq2seq.to(device)
-    network.load_state_dict(torch.load(args.rl_finetune_network_load_path + args.prefix + '.pt'))
+    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + args.prefix + '.pt'))
     network.to(device)
 
     # import third_party_parser
@@ -305,7 +305,11 @@ def main():
     network.eval()
     seq2seq.eval()
     generation_res = []
-    
+    ab_diff = []
+    ac_diff = []
+    bc_same = []
+    cnt = 0
+
     with torch.no_grad():
         for batch in conllx_data.iterate_batch_tensor(data_train, batch_size):  # batch_size
             word, char, pos, heads, types, masks, lengths = batch
@@ -314,8 +318,7 @@ def main():
             sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
             end_position = torch.eq(sel, END_token).nonzero()
             masks_sel = torch.ones_like(sel, dtype=torch.float)
-            lengths_sel = torch.ones_like(lengths).fill_(
-                sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+            lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
             if not len(end_position) == 0:
                 ij_back = -1
                 for ij in end_position:
@@ -364,19 +367,32 @@ def main():
 
             # np_sel = sel.cpu().numpy()
             for i in range(batch[0].size()[0]):
-                # print("Different between parser A and parser B: \t"
-                #       + str(parse_diff(heads_pred[i], sudo_heads_pred[i], lengths_sel[i]))
-                #       + " Different between parser A and parser C: \t"
-                #       + str(parse_diff(heads_pred[i], sudo_heads_pred_1[i], lengths_sel[i]))
-                #       + " Different between parser B and parser C: \t"
-                #       + str(parse_diff(sudo_heads_pred[i], sudo_heads_pred_1[i], lengths_sel[i])))
-
-
-                # # get current length
-                # gen_length = np.where(np_sel == 1)
-                if (parse_diff(heads_pred[i], sudo_heads_pred[i], lengths_sel[i]) != 0
-                        and parse_diff(heads_pred[i], sudo_heads_pred_1[i], lengths_sel[i]) != 0
-                        and parse_diff(sudo_heads_pred[i], sudo_heads_pred_1[i], lengths_sel[i]) == 0):
+                cnt += 1
+                parse_ab = False
+                if parse_diff(heads_pred[i], sudo_heads_pred[i], lengths_sel[i]) != 0:
+                    parse_ab = True
+                    ab_diff.append((word[i].cpu().numpy().tolist(),
+                                    sel[i].cpu().numpy().tolist(),
+                                    heads_pred[i].tolist(),
+                                    sudo_heads_pred[i].tolist(),
+                                    lengths_sel[i].item()))
+                parse_ac = False
+                if parse_diff(heads_pred[i], sudo_heads_pred_1[i], lengths_sel[i]) != 0:
+                    parse_ac = True
+                    ac_diff.append((word[i].cpu().numpy().tolist(),
+                                    sel[i].cpu().numpy().tolist(),
+                                    heads_pred[i].tolist(),
+                                    sudo_heads_pred_1[i].tolist(),
+                                    lengths_sel[i].item()))
+                parse_bc = False
+                if parse_diff(sudo_heads_pred[i], sudo_heads_pred_1[i], lengths_sel[i]) == 0:
+                    parse_bc = True
+                    bc_same.append((word[i].cpu().numpy().tolist(),
+                                    sel[i].cpu().numpy().tolist(),
+                                    sudo_heads_pred[i].tolist(),
+                                    sudo_heads_pred_1[i].tolist(),
+                                    lengths_sel[i].item()))
+                if parse_ab and parse_ac and parse_bc:
                     generation_res.append((word[i].cpu().numpy().tolist(),
                                            sel[i].cpu().numpy().tolist(),
                                            heads_pred[i].tolist(),
@@ -386,34 +402,59 @@ def main():
                     pass
             # if len(generation_res) > 10:
             #     break
-    # save generation result back to
-    save_path = 'data/ptb/gen' + args.prefix + '.conllu'
-    writer = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-    writer.start(save_path)
-    raw_sents = []
-    gen_sents = []
-    pred_trees = []
-    golden_trees = []
-    gen_lengths = []
-    max_len = 0
-    for res in generation_res:
-        raw_sent, gen_sent, pred_tree, golden_tree, gen_length = res
-        raw_sents.append(raw_sent)
-        gen_sents.append(gen_sent)
-        pred_trees.append(pred_tree)
-        golden_trees.append(golden_tree)
-        gen_lengths.append(gen_length)
-        if gen_length > max_len:
-            max_len = gen_length
+    def save_data(name, holder):
+        # save generation result back to
+        save_path_golden = 'data/ptb/gen' + args.prefix + '_' + name + '_golden' + '.conllu'
+        save_path_pred = 'data/ptb/gen' + args.prefix + '_' + name + '_golden' + '.conllu'
 
-    type = [[3]*max_len for _ in range(len(gen_sents))]
-    pos = [[4]*max_len for _ in range(len(gen_sents))]
-    writer.write(np.array(gen_sents),
-                 np.array(pos),
-                 np.array(golden_trees),
-                 np.array(type),
-                 np.array(gen_lengths), symbolic_root=True)
+        raw_sents = []
+        gen_sents = []
+        pred_trees = []
+        golden_trees = []
+        gen_lengths = []
+        max_len = 0
+        for res in holder:
+            raw_sent, gen_sent, pred_tree, golden_tree, gen_length = res
+            raw_sents.append(raw_sent)
+            gen_sents.append(gen_sent)
+            pred_trees.append(pred_tree)
+            golden_trees.append(golden_tree)
+            gen_lengths.append(gen_length)
+            if gen_length > max_len:
+                max_len = gen_length
+        writer = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+        writer.start(save_path_golden)
+        type = [[3]*max_len for _ in range(len(gen_sents))]
+        pos = [[4]*max_len for _ in range(len(gen_sents))]
+        writer.write(np.array(gen_sents),
+                     np.array(pos),
+                     np.array(golden_trees),
+                     np.array(type),
+                     np.array(gen_lengths), symbolic_root=True)
 
+        writer = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+        writer.start(save_path_pred)
+        type = [[3] * max_len for _ in range(len(gen_sents))]
+        pos = [[4] * max_len for _ in range(len(gen_sents))]
+        writer.write(np.array(gen_sents),
+                     np.array(pos),
+                     np.array(pred_trees),
+                     np.array(type),
+                     np.array(gen_lengths), symbolic_root=True)
+    print('=='*10)
+    print('Total cnt: ' + str(cnt))
+    print("-"*10)
+    print('generate data: ' + str(len(generation_res)))
+    save_data('', generation_res)
+    print("-" * 10)
+    print('ab difference data: ' + str(len(ab_diff)))
+    save_data('ab_diff', ab_diff)
+    print("-" * 10)
+    print('ac difference data: ' + str(len(ac_diff)))
+    save_data('ac_diff', ab_diff)
+    print("-" * 10)
+    print('bc same data: ' + str(len(bc_same)))
+    save_data('ac_diff', bc_same)
 
 if __name__ == '__main__':
     main()
