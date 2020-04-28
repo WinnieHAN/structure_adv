@@ -451,7 +451,7 @@ def main():
     save_data('ab_diff', ab_diff)
     print("-" * 10)
     print('ac difference data: ' + str(len(ac_diff)))
-    save_data('ac_diff', ab_diff)
+    save_data('ac_diff', ac_diff)
     print("-" * 10)
     print('bc same data: ' + str(len(bc_same)))
     save_data('ac_diff', bc_same)
