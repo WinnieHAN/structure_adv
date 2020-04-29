@@ -88,7 +88,7 @@ def main():
     args_parser.add_argument('--z3_weight', type=float, default=1.0, help='reward weight of z3')
     args_parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
     args_parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
-    args_parser.add_argument('--prefix', type=str, default='')
+    args_parser.add_argument('--prefix', action='append')
     args = args_parser.parse_args()
 
     logger = get_logger("Sentence Generator")
@@ -122,8 +122,6 @@ def main():
     global_variables.Z3_REWARD_WEIGHT = args.z3_weight
     global_variables.MP_REWARD_WEIGHT = args.mp_weight
     global_variables.PPL_REWARD_WEIGHT = args.ppl_weight
-
-    global_variables.PREFIX = args.prefix
 
 
     use_pos = args.pos
@@ -223,12 +221,6 @@ def main():
     seq2seq.emb.weight.requires_grad = False
     print(seq2seq)
 
-    # load pretrained model
-    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + args.prefix + '.pt'))
-    seq2seq.to(device)
-    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + args.prefix + '.pt'))
-    network.to(device)
-
     # import third_party_parser
     if parser_select[0] == 'stackPtr':
         sudo_golden_parser = third_party_parser(device, word_table, char_table, './models/parsing/stack_ptr/')
@@ -300,109 +292,6 @@ def main():
         biaffine_parser_1.eval()
 
 
-    # Begin generate
-
-    network.eval()
-    seq2seq.eval()
-    generation_res = []
-    ab_diff = []
-    ac_diff = []
-    bc_same = []
-    cnt = 0
-
-    with torch.no_grad():
-        for batch in conllx_data.iterate_batch_tensor(data_train, batch_size):  # batch_size
-            word, char, pos, heads, types, masks, lengths = batch
-
-            inp = word
-            sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
-            end_position = torch.eq(sel, END_token).nonzero()
-            masks_sel = torch.ones_like(sel, dtype=torch.float)
-            lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
-            if not len(end_position) == 0:
-                ij_back = -1
-                for ij in end_position:
-                    if not (ij[0] == ij_back):
-                        lengths_sel[ij[0]] = ij[1]
-                        masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
-                        ij_back = ij[0]
-
-            # current parsing result
-            heads_pred, types_pred = network.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
-                                                        length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-            if 'stackPtr' == parser_select[0]:
-                sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
-                                                                              lengths_sel, beam=1)
-            elif 'bist' == parser_select[0]:
-                str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                           one_stc in sel.cpu().numpy()]
-                stc_pred = list(bist_parser.predict_stcs(str_sel, lengths_sel))
-                sudo_heads_pred = np.array(
-                    [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
-                     stc in stc_pred])
-            elif parser_select[0] == 'biaffine':
-                sudo_heads_pred, _ = biaffine_parser.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
-                                                                length=lengths_sel,
-                                                                leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-            else:
-                raise ValueError('Error first parser select code!')
-
-            if 'stackPtr' == parser_select[1]:
-                sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
-                                                                                    lengths_sel, beam=1)
-            elif 'bist' == parser_select[1]:
-                str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                             one_stc in sel.cpu().numpy()]
-                stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
-                sudo_heads_pred_1 = np.array(
-                    [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
-                     stc in stc_pred_1])
-            elif parser_select[1] == 'biaffine':
-                sudo_heads_pred_1, _ = biaffine_parser_1.decode_mst(sel, input_char=None, input_pos=None,
-                                                                    mask=masks_sel,
-                                                                    length=lengths_sel,
-                                                                    leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-            else:
-                raise ValueError('Error second parser select code!')
-
-            # np_sel = sel.cpu().numpy()
-            lens = lengths_sel.cpu().numpy().tolist()
-            for i in range(batch[0].size()[0]):
-                cnt += 1
-                parse_ab = False
-                if parse_diff(heads_pred[i], sudo_heads_pred[i], lens[i]) != 0:
-                    parse_ab = True
-                    ab_diff.append((word[i].cpu().numpy().tolist(),
-                                    sel[i].cpu().numpy().tolist(),
-                                    heads_pred[i].tolist(),
-                                    sudo_heads_pred[i].tolist(),
-                                    lengths_sel[i].item()))
-                parse_ac = False
-                if parse_diff(heads_pred[i], sudo_heads_pred_1[i], lens[i]) != 0:
-                    parse_ac = True
-                    ac_diff.append((word[i].cpu().numpy().tolist(),
-                                    sel[i].cpu().numpy().tolist(),
-                                    heads_pred[i].tolist(),
-                                    sudo_heads_pred_1[i].tolist(),
-                                    lengths_sel[i].item()))
-                parse_bc = False
-                if parse_diff(sudo_heads_pred[i], sudo_heads_pred_1[i], lens[i]) == 0:
-                    parse_bc = True
-                    bc_same.append((word[i].cpu().numpy().tolist(),
-                                    sel[i].cpu().numpy().tolist(),
-                                    sudo_heads_pred[i].tolist(),
-                                    sudo_heads_pred_1[i].tolist(),
-                                    lengths_sel[i].item()))
-                if parse_ab and parse_ac and parse_bc:
-                    generation_res.append((word[i].cpu().numpy().tolist(),
-                                           sel[i].cpu().numpy().tolist(),
-                                           heads_pred[i].tolist(),
-                                           sudo_heads_pred[i].tolist(),
-                                           lengths_sel[i].item()))
-                else:
-                    pass
-            # if len(generation_res) > 10:
-            #     break
     def save_data(name, holder):
         # save generation result back to
         save_path_golden = 'data/ptb/gen' + args.prefix + '_' + name + '_golden' + '.conllu'
@@ -442,20 +331,130 @@ def main():
                      np.array(pred_trees),
                      np.array(type),
                      np.array(gen_lengths), symbolic_root=True)
-    print('=='*10)
-    print('Total cnt: ' + str(cnt))
-    print("-"*10)
-    print('generate data: ' + str(len(generation_res)))
-    save_data('', generation_res)
-    print("-" * 10)
-    print('ab difference data: ' + str(len(ab_diff)))
-    save_data('ab_diff', ab_diff)
-    print("-" * 10)
-    print('ac difference data: ' + str(len(ac_diff)))
-    save_data('ac_diff', ac_diff)
-    print("-" * 10)
-    print('bc same data: ' + str(len(bc_same)))
-    save_data('ac_diff', bc_same)
+
+    # Begin generate
+    for prefix in args.prefix:
+        # load pretrained model
+        seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + prefix + '.pt'))
+        seq2seq.to(device)
+        network.load_state_dict(torch.load(args.rl_finetune_network_load_path + prefix + '.pt'))
+        network.to(device)
+
+        network.eval()
+        seq2seq.eval()
+        generation_res = []
+        ab_diff = []
+        ac_diff = []
+        bc_same = []
+        cnt = 0
+
+        with torch.no_grad():
+            for batch in conllx_data.iterate_batch_tensor(data_train, batch_size):  # batch_size
+                word, char, pos, heads, types, masks, lengths = batch
+
+                inp = word
+                sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+                end_position = torch.eq(sel, END_token).nonzero()
+                masks_sel = torch.ones_like(sel, dtype=torch.float)
+                lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                if not len(end_position) == 0:
+                    ij_back = -1
+                    for ij in end_position:
+                        if not (ij[0] == ij_back):
+                            lengths_sel[ij[0]] = ij[1]
+                            masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                            ij_back = ij[0]
+
+                # current parsing result
+                heads_pred, types_pred = network.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
+                                                            length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                if 'stackPtr' == parser_select[0]:
+                    sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
+                                                                                  lengths_sel, beam=1)
+                elif 'bist' == parser_select[0]:
+                    str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                               one_stc in sel.cpu().numpy()]
+                    stc_pred = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                    sudo_heads_pred = np.array(
+                        [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
+                         stc in stc_pred])
+                elif parser_select[0] == 'biaffine':
+                    sudo_heads_pred, _ = biaffine_parser.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
+                                                                    length=lengths_sel,
+                                                                    leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                else:
+                    raise ValueError('Error first parser select code!')
+
+                if 'stackPtr' == parser_select[1]:
+                    sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
+                                                                                        lengths_sel, beam=1)
+                elif 'bist' == parser_select[1]:
+                    str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                                 one_stc in sel.cpu().numpy()]
+                    stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
+                    sudo_heads_pred_1 = np.array(
+                        [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
+                         stc in stc_pred_1])
+                elif parser_select[1] == 'biaffine':
+                    sudo_heads_pred_1, _ = biaffine_parser_1.decode_mst(sel, input_char=None, input_pos=None,
+                                                                        mask=masks_sel,
+                                                                        length=lengths_sel,
+                                                                        leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                else:
+                    raise ValueError('Error second parser select code!')
+
+                # np_sel = sel.cpu().numpy()
+                lens = lengths_sel.cpu().numpy().tolist()
+                for i in range(batch[0].size()[0]):
+                    cnt += 1
+                    parse_ab = False
+                    if parse_diff(heads_pred[i], sudo_heads_pred[i], lens[i]) != 0:
+                        parse_ab = True
+                        ab_diff.append((word[i].cpu().numpy().tolist(),
+                                        sel[i].cpu().numpy().tolist(),
+                                        heads_pred[i].tolist(),
+                                        sudo_heads_pred[i].tolist(),
+                                        lengths_sel[i].item()))
+                    parse_ac = False
+                    if parse_diff(heads_pred[i], sudo_heads_pred_1[i], lens[i]) != 0:
+                        parse_ac = True
+                        ac_diff.append((word[i].cpu().numpy().tolist(),
+                                        sel[i].cpu().numpy().tolist(),
+                                        heads_pred[i].tolist(),
+                                        sudo_heads_pred_1[i].tolist(),
+                                        lengths_sel[i].item()))
+                    parse_bc = False
+                    if parse_diff(sudo_heads_pred[i], sudo_heads_pred_1[i], lens[i]) == 0:
+                        parse_bc = True
+                        bc_same.append((word[i].cpu().numpy().tolist(),
+                                        sel[i].cpu().numpy().tolist(),
+                                        sudo_heads_pred[i].tolist(),
+                                        sudo_heads_pred_1[i].tolist(),
+                                        lengths_sel[i].item()))
+                    if parse_ab and parse_ac and parse_bc:
+                        generation_res.append((word[i].cpu().numpy().tolist(),
+                                               sel[i].cpu().numpy().tolist(),
+                                               heads_pred[i].tolist(),
+                                               sudo_heads_pred[i].tolist(),
+                                               lengths_sel[i].item()))
+                    else:
+                        pass
+            # if len(generation_res) > 10:
+            #     break
+        print('=='*10 + prefix + '=='*10)
+        print('Total cnt: ' + str(cnt))
+        print("-"*10)
+        print('generate data: ' + str(len(generation_res)))
+        save_data('', generation_res)
+        print("-" * 10)
+        print('ab difference data: ' + str(len(ab_diff)))
+        save_data('ab_diff', ab_diff)
+        print("-" * 10)
+        print('ac difference data: ' + str(len(ac_diff)))
+        save_data('ac_diff', ac_diff)
+        print("-" * 10)
+        print('bc same data: ' + str(len(bc_same)))
+        save_data('ac_diff', bc_same)
 
 if __name__ == '__main__':
     main()
