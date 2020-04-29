@@ -32,11 +32,11 @@ uid = uuid.uuid4().hex[:6]
 
 def parse_diff(out, dec_out, length_out):
     stc_dda = sum([0 if out[i] == dec_out[i] else 1 for i in range(1, length_out)])
-    return stc_dda / (length_out - 1)
+    return float(stc_dda) / float(length_out - 1)
 
 
 def unk_rate(sent):
-    return sent.count(0) / len(sent)
+    return float(sent.count(0)) / float(len(sent))
 
 
 def main():
@@ -366,10 +366,11 @@ def main():
                 raise ValueError('Error second parser select code!')
 
             # np_sel = sel.cpu().numpy()
+            lens = lengths_sel.cpu().numpy().tolist()
             for i in range(batch[0].size()[0]):
                 cnt += 1
                 parse_ab = False
-                if parse_diff(heads_pred[i], sudo_heads_pred[i], lengths_sel[i]) != 0:
+                if parse_diff(heads_pred[i], sudo_heads_pred[i], lens[i]) != 0:
                     parse_ab = True
                     ab_diff.append((word[i].cpu().numpy().tolist(),
                                     sel[i].cpu().numpy().tolist(),
@@ -377,7 +378,7 @@ def main():
                                     sudo_heads_pred[i].tolist(),
                                     lengths_sel[i].item()))
                 parse_ac = False
-                if parse_diff(heads_pred[i], sudo_heads_pred_1[i], lengths_sel[i]) != 0:
+                if parse_diff(heads_pred[i], sudo_heads_pred_1[i], lens[i]) != 0:
                     parse_ac = True
                     ac_diff.append((word[i].cpu().numpy().tolist(),
                                     sel[i].cpu().numpy().tolist(),
@@ -385,7 +386,7 @@ def main():
                                     sudo_heads_pred_1[i].tolist(),
                                     lengths_sel[i].item()))
                 parse_bc = False
-                if parse_diff(sudo_heads_pred[i], sudo_heads_pred_1[i], lengths_sel[i]) == 0:
+                if parse_diff(sudo_heads_pred[i], sudo_heads_pred_1[i], lens[i]) == 0:
                     parse_bc = True
                     bc_same.append((word[i].cpu().numpy().tolist(),
                                     sel[i].cpu().numpy().tolist(),
