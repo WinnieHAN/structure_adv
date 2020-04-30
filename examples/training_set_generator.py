@@ -116,14 +116,6 @@ def main():
     char_embedding = args.char_embedding
     char_path = args.char_path
 
-    # rl weight
-    global_variables.Z1_REWARD_WEIGHT = args.z1_weight
-    global_variables.Z2_REWARD_WEIGHT = args.z2_weight
-    global_variables.Z3_REWARD_WEIGHT = args.z3_weight
-    global_variables.MP_REWARD_WEIGHT = args.mp_weight
-    global_variables.PPL_REWARD_WEIGHT = args.ppl_weight
-
-
     use_pos = args.pos
     pos_dim = args.pos_dim
     word_dict, word_dim = utils.load_embedding_dict(word_embedding, word_path)
@@ -136,7 +128,6 @@ def main():
 
     logger.info("Creating Alphabets")
     alphabet_path = os.path.join(model_path, 'alphabets/')
-    model_name = os.path.join(model_path, model_name)
     word_alphabet, char_alphabet, pos_alphabet, type_alphabet = conllx_data.create_alphabets(alphabet_path, train_path,
                                                                                              data_paths=[dev_path, test_path],
                                                                                              max_vocabulary_size=100000,
@@ -157,9 +148,9 @@ def main():
     logger.info("Reading Data")
     device = torch.device('cuda') if args.cuda else torch.device('cpu')
 
-    data_train = conllx_data.read_data_to_tensor(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet,
+    data_train = conllx_data.read_data_to_tensor(dev_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet,
                                                  symbolic_root=True, device=device)
-    num_data = sum(data_train[1])
+    # num_data = sum(data_train[1])
 
     def construct_word_embedding_table():
         scale = np.sqrt(3.0 / word_dim)
@@ -292,10 +283,10 @@ def main():
         biaffine_parser_1.eval()
 
 
-    def save_data(name, holder):
+    def save_data(prefix, name, holder):
         # save generation result back to
-        save_path_golden = 'data/ptb/gen' + args.prefix + '_' + name + '_golden' + '.conllu'
-        save_path_pred = 'data/ptb/gen' + args.prefix + '_' + name + '_golden' + '.conllu'
+        save_path_golden = 'data/ptb/gen' + prefix + '_' + name + '_golden' + '.conllu'
+        save_path_pred = 'data/ptb/gen' + prefix + '_' + name + '_golden' + '.conllu'
 
         raw_sents = []
         gen_sents = []
@@ -335,9 +326,11 @@ def main():
     # Begin generate
     for prefix in args.prefix:
         # load pretrained model
-        seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + prefix + '.pt'))
+        # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + prefix + '.pt'))
+        seq2seq.load_state_dict(torch.load('models/seq2seq/seq2seq_save_model2.pt'))
         seq2seq.to(device)
-        network.load_state_dict(torch.load(args.rl_finetune_network_load_path + prefix + '.pt'))
+        # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + prefix + '.pt'))
+        network.load_state_dict(torch.load('models/seq2seq/network_save_model2.pt'))
         network.to(device)
 
         network.eval()
@@ -350,6 +343,8 @@ def main():
 
         with torch.no_grad():
             for batch in conllx_data.iterate_batch_tensor(data_train, batch_size):  # batch_size
+                print(cnt)
+
                 word, char, pos, heads, types, masks, lengths = batch
 
                 inp = word
@@ -441,20 +436,22 @@ def main():
                         pass
             # if len(generation_res) > 10:
             #     break
+                if cnt > 500:
+                    break
         print('=='*10 + prefix + '=='*10)
         print('Total cnt: ' + str(cnt))
         print("-"*10)
         print('generate data: ' + str(len(generation_res)))
-        save_data('', generation_res)
+        save_data(prefix, '', generation_res)
         print("-" * 10)
         print('ab difference data: ' + str(len(ab_diff)))
-        save_data('ab_diff', ab_diff)
+        save_data(prefix, 'ab_diff', ab_diff)
         print("-" * 10)
         print('ac difference data: ' + str(len(ac_diff)))
-        save_data('ac_diff', ac_diff)
+        save_data(prefix, 'ac_diff', ac_diff)
         print("-" * 10)
         print('bc same data: ' + str(len(bc_same)))
-        save_data('ac_diff', bc_same)
+        save_data(prefix, 'bc_diff', bc_same)
 
 if __name__ == '__main__':
     main()

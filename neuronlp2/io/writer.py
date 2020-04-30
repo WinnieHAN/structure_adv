@@ -44,15 +44,15 @@ class CoNLLXWriter(object):
         self.__source_file.close()
 
     def write(self, word, pos, head, type, lengths, symbolic_root=False, symbolic_end=False):
-        batch_size, _ = word.shape
+        batch_size = word.shape[0]
         start = 1 if symbolic_root else 0
         end = 1 if symbolic_end else 0
         for i in range(batch_size):
             for j in range(start, lengths[i] - end):
-                w = self.__word_alphabet.get_instance(word[i, j]).encode('utf-8')
-                p = self.__pos_alphabet.get_instance(pos[i, j]).encode('utf-8')
-                t = self.__type_alphabet.get_instance(type[i, j]).encode('utf-8')
-                h = head[i, j]
+                w = self.__word_alphabet.get_instance(word[i][j]).encode('utf-8')
+                p = self.__pos_alphabet.get_instance(pos[i][j]).encode('utf-8')
+                t = self.__type_alphabet.get_instance(type[i][j]).encode('utf-8')
+                h = head[i][j]
                 self.__source_file.write('%d\t%s\t_\t_\t%s\t_\t%d\t%s\n' % (j, w, p, h, t))
             self.__source_file.write('\n')
 
