@@ -383,16 +383,22 @@ def read_data_to_tensor(source_path, word_alphabet, char_alphabet, pos_alphabet,
 def read_data_list_to_tensor(source_path_list, word_alphabet, char_alphabet, pos_alphabet, type_alphabet, max_size=None,
                             normalize_digits=True, symbolic_root=False, symbolic_end=False, device=torch.device('cpu')):
     data = []
+    max_char_length = []
     for source_path in source_path_list:
-        data_raw, max_char_length = read_data(source_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet,
-                                          max_size=max_size, normalize_digits=normalize_digits,
-                                          symbolic_root=symbolic_root, symbolic_end=symbolic_end)
+        data_raw, max_char_length_raw = read_data(source_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet,
+                                                  max_size=max_size, normalize_digits=normalize_digits,
+                                                  symbolic_root=symbolic_root, symbolic_end=symbolic_end)
         # mix data
         if len(data) == 0:
             data = data_raw
         else:
             for i in range(len(data)):
                 data[i] = data[i] + data_raw[i]
+        if len(max_char_length) == 0:
+            max_char_length = max_char_length_raw
+        else:
+            for idx in range(len(max_char_length_raw)):
+                max_char_length[idx] = max(max_char_length_raw[idx], max_char_length[idx])
 
     bucket_sizes = [len(data[b]) for b in range(len(_buckets))]
 
