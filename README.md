@@ -71,3 +71,17 @@ line 61:        tokenizer = AutoTokenizer.from_pretrained('/home/hanwj/PycharmPr
 utils.py
 line 64:        model = AutoModel.from_pretrained('/home/hanwj/PycharmProjects/check_bertscore_ppl/pretrained_model_bert')  # model_type
 
+=============tagging=============
+http://www.dovov.com/python-nltk-pos_tag.html
+$ cd ~ $ wget http://ronan.collobert.com/senna/senna-v3.0.tgz $ tar zxvf senna-v3.0.tgz $ python >>> from os.path import expanduser >>> home = expanduser("~") >>> from nltk.tag.senna import SennaTagger >>> st = SennaTagger(home+'/senna') >>> text = "The quick brown fox jumps over the lazy dog" >>> st.tag(text.split()) [('The', u'DT'), ('quick', u'JJ'), ('brown', u'JJ'), ('fox', u'NN'), ('jumps', u'VBZ'), ('over', u'IN'), ('the', u'DT'), ('lazy', u'JJ'), ('dog', u'NN')] 
+
+change the version to the latest 
+$ cd ~ $ wget http://nlp.stanford.edu/software/stanford-postagger-2015-04-20.zip $ unzip stanford-postagger-2015-04-20.zip $ mv stanford-postagger-2015-04-20 stanford-postagger $ python >>> from os.path import expanduser >>> home = expanduser("~") >>> from nltk.tag.stanford import POSTagger >>> _path_to_model = home + '/stanford-postagger/models/english-bidirectional-distsim.tagger' >>> _path_to_jar = home + '/stanford-postagger/stanford-postagger.jar' >>> st = POSTagger(path_to_model=_path_to_model, path_to_jar=_path_to_jar) >>> text = "The quick brown fox jumps over the lazy dog" >>> st.tag(text.split()) [(u'The', u'DT'), (u'quick', u'JJ'), (u'brown', u'JJ'), (u'fox', u'NN'), (u'jumps', u'VBZ'), (u'over', u'IN'), (u'the', u'DT'), (u'lazy', u'JJ'), (u'dog', u'NN')] 
+or
+http://www.voidcn.com/article/p-kalbwyez-byd.html
+
+
+Should copy tagging_models/tagging/crfnn/network.pt from my server
+And nltk tagging models
+  
+/examples/run_adv_tagger.py  --cuda --mode LSTM --num_epochs 200 --batch_size 16 --hidden_size 256 --num_layers 1   --char_dim 30 --num_filters 30 --tag_space 256   --learning_rate 0.01 --decay_rate 0.05 --schedule 5 --gamma 0.0   --dropout std --p_in 0.33 --p_rnn 0.33 0.5 --p_out 0.5 --unk_replace 0.0 --bigram   --embedding sskip --embedding_dict data/sskip/sskip.eng.100.gz  --train data/ptb/train.conllu --dev data/ptb/dev.conllu --test data/ptb/test.conllu --model_path tagging_models/tagging/crfnn/ --model_name network.pt --treebank ptb  

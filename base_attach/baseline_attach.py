@@ -92,6 +92,7 @@ def main():
     args_parser.add_argument('--rl_finetune_seq2seq_load_path', default='models/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
     args_parser.add_argument('--rl_finetune_network_load_path', default='models/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
 
+    args_parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
 
     args = args_parser.parse_args()
 
@@ -325,7 +326,11 @@ def main():
     max_decay = 9
     double_schedule_decay = 5
     num_epochs = 1  # debug hanwj
-    network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))  # TODO: 7.13
+    if args.treebank == 'ptb':
+        network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))  # TODO: 10.7
+    elif args.treebank == 'ctb':
+        network.load_state_dict(torch.load('ctb_models/parsing/biaffine/network.pt'))  # TODO: 10.7
+    # network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))  # TODO: 7.13
     network.to(device)
     for epoch in range(1, num_epochs + 1):
         print('Epoch %d (%s, optim: %s, learning rate=%.6f, eps=%.1e, decay rate=%.2f (schedule=%d, patient=%d, decay=%d)): ' % (epoch, mode, opt, lr, eps, decay_rate, schedule, patient, decay))
@@ -350,12 +355,20 @@ def main():
         # b = a.T
         # dist = a + b + c_
         # np.save('base_attach/dist_counter_35374.npy', dist)
-        outf = 'base_attach/adv_sentences.txt'
+        outf = 'base_attach/adv_sentences025.txt'
         wf = codecs.open(outf, 'w', encoding='utf8')
+        outf_conllu = 'base_attach/adv_sentences025.conllu'
+        wf_conllu = codecs.open(outf_conllu, 'w', encoding='utf8')
         ori_outf = 'base_attach/ori_sentences.txt'
         ori_wf = codecs.open(ori_outf, 'w', encoding='utf8')
         ori_word_embedding = network.parameters().next().detach().data.cpu().numpy().T  # torch.Size([35374, 100])
-        for batch in conllx_data.iterate_batch_tensor(data_dev, batch_size):
+        kk = 0
+        print('batch_size: ', str(batch_size))
+        for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):
+            kk = kk + 1
+            print('--------'+str(kk)+'--------')
+            if kk > 5:
+                break
             word, char, pos, heads, types, masks, lengths = batch
 
             optim.zero_grad()
@@ -367,11 +380,12 @@ def main():
             optim.step()
 
             for batch_i in range(len(word)):
-                ori_wf.write(' '.join([str(word_alphabet.get_instance(wordi)) for wordi in word[batch_i][1:] if not wordi==1]))
+                ori_wf.write(' '.join([str(word_alphabet.get_instance(wordi)) for wordi in word[batch_i][1:] if not wordi==1]).encode('utf-8'))
                 ori_wf.write('\n')
             # adv_word_embedding = network.parameters().next().detach().data.cpu().numpy().T  #torch.Size([35374, 100])
             for batch_i in range(len(word)):
-                for batch_j in range(1, len(word[0])):
+                changed_num = 0
+                for batch_j in range(1, lengths[batch_i].cpu().numpy()-1):
                     one_word = word[batch_i][batch_j].item()
                     if one_word==1:
                         continue
@@ -382,13 +396,25 @@ def main():
                     a = np.sum(np.square(ori_word_embedding), axis=0)#.reshape((1, -1))
                     b = np.sum(np.square(adv_vector))
                     dist = a + c_ + b
-                    neighbours, _ = glove_utils.pick_most_similar_words_from_vector(src_word_idx, adv_vector, dist, ret_count=1, threshold=5)
+                    neighbours, _ = glove_utils.pick_most_similar_words_from_vector(src_word_idx, adv_vector, dist, ret_count=3, threshold=20)
+                    if word[batch_i][batch_j] == neighbours[0]:
+                        continue
+                    if changed_num*1.0/(lengths[batch_i].cpu().numpy()-1)>0.1:
+                        break
                     word[batch_i][batch_j] = neighbours[0]
+                    changed_num = changed_num + 1
+
             for batch_i in range(len(word)):
                 wf.write(' '.join([str(word_alphabet.get_instance(wordi)) for wordi in word[batch_i][1:] if not wordi==1]))
                 wf.write('\n')
+            for batch_i in range(len(word)):
+                ws = [str(word_alphabet.get_instance(wordi)) for wordi in word[batch_i][1:] if not wordi==1]
+                for w_i in range(len(ws)):
+                    wf_conllu.write(str(w_i+1) + '\t'+ws[w_i] + '\t'+'_' + '\t'+'NNP'+ '\t'+ 'NNP'+'\t' +'_'+'\t'+str(1)+ '\tnn\t_\t_\n')
+                wf_conllu.write('\n')
         wf.close()
         ori_wf.close()
+        wf_conllu.close()
         #     with torch.no_grad():
         #         num_inst = word.size(0) if obj == 'crf' else masks.sum() - word.size(0)
         #         train_err += loss * num_inst

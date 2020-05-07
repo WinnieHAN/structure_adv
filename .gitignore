@@ -1,3 +1,11 @@
+ctb_dumped/
+ori_cands.txt
+ori_refs.txt
+pretrained_model_bert/
+pretrained_model_bert_zh/
+pretrained_model_gpt2/
+tagging_dumped/
+tagging_models/
 bist_parser/ctb_output/
 bist_parser/sskip.chn.50
 ctb_models/
