@@ -421,7 +421,7 @@ class LossBiafRL(nn.Module):
 
 
 class TagLossBiafRL(nn.Module): # parsers
-    def __init__(self, device, word_alphabet, vocab_size):
+    def __init__(self, device, word_alphabet, vocab_size, port):
         super(TagLossBiafRL, self).__init__()
 
         self.bl = 0
@@ -429,6 +429,7 @@ class TagLossBiafRL(nn.Module): # parsers
         self.device = device
         self.word_alphabet = word_alphabet
         self.vocab_size = vocab_size
+        self.port = port
 
     def get_reward_diff(self, out, dec_out, length_out, ori_words, ori_words_length):
         stc_dda = sum([0 if out[i] == dec_out[i] else 1 for i in range(0, length_out)])
@@ -458,9 +459,39 @@ class TagLossBiafRL(nn.Module): # parsers
 
         return reward
 
+    def get_unk_rate(self, sent, length):
+        return float(sent[:length].count(0) / float(length))
+
+    def get_bertscore_ppl(self, ori_words, ori_words_length, sel, stc_length_out):
+
+        self.write_text(ori_words, ori_words_length, sel, stc_length_out)
+
+        message = 'calculate'
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', self.port))
+        sock.sendall(message)
+
+        rec_data = sock.recv(1024)
+        # byte_res = rec_data
+        # while len(rec_data) == 0:
+        #     rec_data = self.sock.recv(102400)
+        #     byte_res += rec_data
+        # received = json.loads(rec_data)
+        sock.close()
+        if rec_data == 'done':
+            meaning_preservation = np.loadtxt(global_variables.PREFIX + 'temp.txt')
+            logppl = np.loadtxt(global_variables.PREFIX + 'temp_ppl.txt')
+            os.remove(global_variables.PREFIX + 'temp_ppl.txt')
+            os.remove(global_variables.PREFIX + 'temp.txt')
+            os.remove(global_variables.PREFIX + 'cands.txt')
+            os.remove(global_variables.PREFIX + 'refs.txt')
+            return meaning_preservation, logppl
+        else:
+            raise ValueError('server error!')
+
     def write_text(self, ori_words, ori_words_length, sel, stc_length_out):
-        condsf = 'cands.txt'
-        refs = 'refs.txt'
+        condsf = global_variables.PREFIX + 'cands.txt'
+        refs = global_variables.PREFIX + 'refs.txt'
         oris = [[self.word_alphabet.get_instance(ori_words[si, wi]).encode('utf-8') for wi in range(1, ori_words_length[si])] for si in range(len(ori_words))]
         preds = [[self.word_alphabet.get_instance(sel[si, wi]).encode('utf-8') for wi in range(1, stc_length_out[si])] for si in range(len(sel))]
 
@@ -478,11 +509,14 @@ class TagLossBiafRL(nn.Module): # parsers
 
 
     def forward(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out, sudo_golden_out_1, ori_words, ori_words_length):
+
+        list_stc_length_out = stc_length_out.cpu().numpy().tolist()
+
         ####1####
         batch = sel.shape[0]
         rewards_z1 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z1.append(reward)
         rewards_z1 = np.asarray(rewards_z1)
 
@@ -490,7 +524,7 @@ class TagLossBiafRL(nn.Module): # parsers
         batch = sel.shape[0]
         rewards_z2 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z2.append(reward)
         rewards_z2 = np.asarray(rewards_z2)
 
@@ -498,29 +532,47 @@ class TagLossBiafRL(nn.Module): # parsers
         batch = sel.shape[0]
         rewards_z3 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z3.append(reward)
         rewards_z3 = np.asarray(rewards_z3) *0.01
 
         ####3#####add meaning_preservation as reward
         batch = sel.shape[0]
-        self.write_text(ori_words, ori_words_length, sel, stc_length_out)
-        os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
-        meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')#*100
-        logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt') # * (-0.1)
-        ppl = -np.exp(logppl) * 0.001
-        # rewards = meaning_preservation * 10  # affect more
+        # self.write_text(ori_words, ori_words_length, sel, stc_length_out)
+        # os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
+        # meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')#*100
+        # logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt') # * (-0.1)
+        # ppl = -np.exp(logppl) * 0.001
+        # # rewards = meaning_preservation * 10  # affect more
 
-        bleus_w = []
+        meaning_preservation, logppl = self.get_bertscore_ppl(ori_words, ori_words_length, sel, stc_length_out)
+        meaning_preservation = np.array(meaning_preservation)
+        ppl = -np.exp(np.array(logppl))
+
+        # # === bleu reward ==
+        # bleus_w = []
+        # for i in range(batch):
+        #     bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
+        #
+        #     bleus_w.append(bleu)
+        # bleus_w = np.asarray(bleus_w)
+
+        ###6### unk rate
+        unk_rewards = []
+        list_sel = sel.cpu().float().numpy().tolist()
         for i in range(batch):
-            bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
-
-            bleus_w.append(bleu)
-        bleus_w = np.asarray(bleus_w)
+            reward = self.get_unk_rate(list_sel[i], list_stc_length_out[i])
+            unk_rewards.append(-1 * reward)
+        unk_rewards = np.asarray(unk_rewards)
 
         #-----------------------------------------------
 
-        rewards = (meaning_preservation + ppl + rewards_z1 + rewards_z2 + rewards_z3)*0.001      #TODO  0.1# + bleus_w*5
+        rewards = (meaning_preservation * global_variables.MP_REWARD_WEIGHT +
+                   ppl * global_variables.PPL_REWARD_WEIGHT +
+                   rewards_z1 * global_variables.Z1_REWARD_WEIGHT +
+                   rewards_z2 * global_variables.Z2_REWARD_WEIGHT +
+                   rewards_z3 * global_variables.Z3_REWARD_WEIGHT +
+                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
         # rewards = bleus_w * 10  # 8.26
 
         ls3 = 0
@@ -547,19 +599,25 @@ class TagLossBiafRL(nn.Module): # parsers
         # print('ppl: ', np.average(ppl))
 
         # loss = ls1
-        return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(rewards_z3), np.average(meaning_preservation), np.average(ppl) #loss, ls, ls1, bleu, bleu1
+        return loss, \
+               np.average(rewards_z1) * global_variables.Z1_REWARD_WEIGHT, \
+               np.average(rewards_z2) * global_variables.Z2_REWARD_WEIGHT, \
+               np.average(rewards_z3) * global_variables.Z3_REWARD_WEIGHT, \
+               np.average(meaning_preservation) * global_variables.MP_REWARD_WEIGHT, \
+               np.average(ppl) * global_variables.PPL_REWARD_WEIGHT, \
+               np.average(unk_rewards) * global_variables.UNK_REWARD_WEIGHT #loss, ls, ls1, bleu, bleu1
 
-    def forward_verbose(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out, sudo_golden_out_1,
-                ori_words, ori_words_length):
+    def forward_verbose(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out, sudo_golden_out_1, ori_words, ori_words_length):
+
+        list_stc_length_out = stc_length_out.cpu().numpy().tolist()
+
         ####1####tagging
         batch = sel.shape[0]
         rewards_z1 = []
         metrics1 = []
         metricsall1 = []
         for i in range(batch):  # batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], stc_length_out[i], ori_words[i],
-                                          ori_words_length[
-                                              i])  # we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z1.append(reward)
             metrics1.append(1.0-(reward*1.0/(stc_length_out[i].cpu().numpy())))
             allsame = 1 if reward==0 else 0
@@ -575,11 +633,9 @@ class TagLossBiafRL(nn.Module): # parsers
         metrics2 = []
         metricsall2 = []
         for i in range(batch):  # batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i],
-                                          ori_words_length[
-                                              i])  # we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
             rewards_z2.append(reward)
-            metrics2.append(1.0-(reward*1.0/(stc_length_out[i].cpu().numpy())))
+            metrics2.append(1.0-(reward*1.0/(list_stc_length_out[i] * 1.0)))
             allsame = 1 if reward==0 else 0
             metricsall2.append(allsame)
         rewards_z2 = np.asarray(rewards_z2)
@@ -592,44 +648,58 @@ class TagLossBiafRL(nn.Module): # parsers
         metrics3 = []
         metricsall3 = []
         for i in range(batch):  # batch
-            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i],
-                                          ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
-            metric3 = self.get_same_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], stc_length_out[i], ori_words[i],
-                                          ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
+            metric3 = self.get_same_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
 
-            stc_diff = self.get_diff_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], stc_length_out[i], ori_words[i],
-                                          ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
+            stc_diff = self.get_diff_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], list_stc_length_out[i], ori_words[i],ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
 
 
             rewards_z3.append(reward)
-            metrics3.append(metric3*1.0/(stc_length_out[i].cpu().numpy()))
+            metrics3.append(metric3*1.0/(list_stc_length_out[i] * 1.0))
             allsame = 1 if stc_diff==0 else 0
             metricsall3.append(allsame)
-        rewards_z3 = np.asarray(rewards_z3) * 0.01
+        rewards_z3 = np.asarray(rewards_z3)
         metrics3 = np.array(metrics3)
         metricsall3 = np.asarray(metricsall3)
 
         ####3#####add meaning_preservation as reward
         batch = sel.shape[0]
-        self.write_text(ori_words, ori_words_length, sel, stc_length_out)
-        os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
-        meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')  # *100
-        logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt')  # * (-0.1)
-        ppl = -np.exp(logppl) * 0.001
-        # rewards = meaning_preservation * 10  # affect more
+        # self.write_text(ori_words, ori_words_length, sel, stc_length_out)
+        # os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
+        # meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')  # *100
+        # logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt')  # * (-0.1)
+        # ppl = -np.exp(logppl) * 0.001
+        # # rewards = meaning_preservation * 10  # affect more
+
+        meaning_preservation, logppl = self.get_bertscore_ppl(ori_words, ori_words_length, sel, stc_length_out)
+        meaning_preservation = np.array(meaning_preservation)
+        ppl = -np.exp(np.array(logppl))
         metrics4 = meaning_preservation
         metrics5 = logppl
 
-        bleus_w = []
-        for i in range(batch):
-            bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
+        # bleus_w = []
+        # for i in range(batch):
+        #     bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
+        #
+        #     bleus_w.append(bleu)
+        # bleus_w = np.asarray(bleus_w)
 
-            bleus_w.append(bleu)
-        bleus_w = np.asarray(bleus_w)
+        ###6### unk rate
+        unk_rewards = []
+        list_sel = sel.cpu().float().numpy().tolist()
+        for i in range(batch):
+            reward = self.get_unk_rate(list_sel[i], list_stc_length_out[i])
+            unk_rewards.append(-1 * reward)
+        unk_rewards = np.asarray(unk_rewards)
 
         # -----------------------------------------------
 
-        rewards = (meaning_preservation + ppl + rewards_z1 + rewards_z2 + rewards_z3) * 0.001  # TODO  0.1# + bleus_w*5
+        rewards = (meaning_preservation * global_variables.MP_REWARD_WEIGHT +
+                   ppl * global_variables.PPL_REWARD_WEIGHT +
+                   rewards_z1 * global_variables.Z1_REWARD_WEIGHT +
+                   rewards_z2 * global_variables.Z2_REWARD_WEIGHT +
+                   rewards_z3 * global_variables.Z3_REWARD_WEIGHT +
+                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
         # rewards = bleus_w * 10  # 8.26
 
         ls3 = 0
@@ -656,6 +726,21 @@ class TagLossBiafRL(nn.Module): # parsers
         # print('ppl: ', np.average(ppl))
 
         # loss = ls1
-        return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(rewards_z3), np.average(
-            meaning_preservation), np.average(ppl), np.sum(metrics1), np.sum(metrics2), np.sum(metrics3), np.sum(metrics4), np.sum(metrics5), np.sum(metricsall1), np.sum(metricsall2), np.sum(metricsall3)  # loss, ls, ls1, bleu, bleu1
+        # return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(rewards_z3), np.average(
+        #     meaning_preservation), np.average(ppl), np.sum(metrics1), np.sum(metrics2), np.sum(metrics3), np.sum(metrics4), np.sum(metrics5), np.sum(metricsall1), np.sum(metricsall2), np.sum(metricsall3)  # loss, ls, ls1, bleu, bleu1
 
+        return loss, \
+               np.average(rewards_z1) * global_variables.Z1_REWARD_WEIGHT, \
+               np.average(rewards_z2) * global_variables.Z2_REWARD_WEIGHT, \
+               np.average(rewards_z3) * global_variables.Z3_REWARD_WEIGHT, \
+               np.average(meaning_preservation) * global_variables.MP_REWARD_WEIGHT, \
+               np.average(ppl) * global_variables.PPL_REWARD_WEIGHT, \
+               np.average(unk_rewards) * global_variables.UNK_REWARD_WEIGHT, \
+               np.average(metrics1), \
+               np.average(metrics2), \
+               np.average(metrics3), \
+               np.average(metrics4), \
+               np.average(metrics5), \
+               np.average(metricsall1), \
+               np.average(metricsall2), \
+               np.average(metricsall3) #loss, ls, ls1, bleu, bleu1

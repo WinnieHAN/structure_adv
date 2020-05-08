@@ -10,13 +10,13 @@ import sys, os
 sys.path.append(".")
 sys.path.append("..")
 
-import time
+# import time
 import argparse
 
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.optim import Adam, SGD
+# from torch.optim import Adam, SGD
 from neuronlp2.io import get_logger, conllx_data
 from neuronlp2.models import BiRecurrentConvCRF, BiVarRecurrentConvCRF
 from neuronlp2 import utils
@@ -24,9 +24,10 @@ from neuronlp2.io import CoNLLXWriter
 
 from seq2seq_rl.seq2seq import Seq2seq_Model
 from seq2seq_rl.rl import LossRL, TagLossBiafRL, get_bleu, get_correct
-import pickle
+# import pickle
 from nltk.tag.senna import SennaTagger
 from nltk.tag import StanfordPOSTagger
+import global_variables
 
 def main():
     parser = argparse.ArgumentParser(description='Tuning with bi-directional RNN-CNN-CRF')
@@ -55,11 +56,11 @@ def main():
     parser.add_argument('--dev')  # "data/POS-penn/wsj/split1/wsj1.dev.original"
     parser.add_argument('--test')  # "data/POS-penn/wsj/split1/wsj1.test.original"
 
-    parser.add_argument('--model_path', help='path for saving model file.', required=True)
-    parser.add_argument('--model_name', help='name for saving model file.', required=True)
+    # parser.add_argument('--model_path', help='path for saving model file.', required=True)
+    # parser.add_argument('--model_name', help='name for saving model file.', required=True)
 
-    parser.add_argument('--seq2seq_save_path', default='tagging_models/tagging/seq2seq/seq2seq_save_model', type=str, help='seq2seq_save_path')
-    parser.add_argument('--network_save_path', default='tagging_models/tagging/seq2seq/network_save_model', type=str, help='network_save_path')
+    # parser.add_argument('--seq2seq_save_path', default='tagging_models/tagging/seq2seq/seq2seq_save_model', type=str, help='seq2seq_save_path')
+    # parser.add_argument('--network_save_path', default='tagging_models/tagging/seq2seq/network_save_model', type=str, help='network_save_path')
 
     parser.add_argument('--seq2seq_load_path', default='tagging_models/tagging/seq2seq/seq2seq_save_model', type=str, help='seq2seq_load_path')
     parser.add_argument('--network_load_path', default='tagging_models/tagging/seq2seq/network_save_model', type=str, help='network_load_path')
@@ -73,6 +74,18 @@ def main():
     parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
 
     parser.add_argument('--direct_eval', action='store_true', help='direct eval without generation process')
+    parser.add_argument('--port', type=int, default=10048, help='localhost port for berscore server')
+    parser.add_argument('--z1_weight', type=float, default=1.0, help='reward weight of z1')
+    parser.add_argument('--z2_weight', type=float, default=1.0, help='reward weight of z2')
+    parser.add_argument('--z3_weight', type=float, default=0.01, help='reward weight of z3')
+    parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
+    parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
+    parser.add_argument('--unk_weight', type=float, default=100, help='reward weight of unk rate')
+    parser.add_argument('--prefix', type=str, default='/home/zhanglw/code/structure_adv/test_')
+
+    parser.add_argument('--parserb', type=str, required=True)
+    parser.add_argument('--parserc', type=str, required=True)
+
 
     args = parser.parse_args()
 
@@ -97,10 +110,28 @@ def main():
     unk_replace = args.unk_replace
     bigram = args.bigram
 
+    # rl weight
+    global_variables.Z1_REWARD_WEIGHT = args.z1_weight
+    global_variables.Z2_REWARD_WEIGHT = args.z2_weight
+    global_variables.Z3_REWARD_WEIGHT = args.z3_weight
+    global_variables.MP_REWARD_WEIGHT = args.mp_weight
+    global_variables.PPL_REWARD_WEIGHT = args.ppl_weight
+    global_variables.UNK_REWARD_WEIGHT = args.unk_weight
+
+    global_variables.PREFIX = args.prefix
+    SCORE_PREFIX = args.prefix.split('/')[-1]
+
+    port = args.port
+
     embedding = args.embedding
     embedding_path = args.embedding_dict
 
     embedd_dict, embedd_dim = utils.load_embedding_dict(embedding, embedding_path)
+
+    parser_select = ['tagger0', 'tagger1']
+
+    parser_b = args.parserb
+    parser_c = args.parserc
 
     logger.info("Creating Alphabets")
     word_alphabet, char_alphabet, pos_alphabet, \
@@ -155,108 +186,108 @@ def main():
         network = BiVarRecurrentConvCRF(embedd_dim, word_alphabet.size(), char_dim, char_alphabet.size(), num_filters, window, mode, hidden_size, num_layers, num_labels,
                                         tag_space=tag_space, embedd_word=word_table, bigram=bigram, p_in=p_in, p_out=p_out, p_rnn=p_rnn, initializer=initializer)
 
-    print('Pretrain tagging model.')
-    if args.treebank == 'ptb':
-        network.load_state_dict(torch.load('tagging_models/tagging/crfnn/network.pt'))  # TODO: 10.7
-    elif args.treebank == 'ctb':
-        network.load_state_dict(torch.load('tagging_ctb_models/tagging/crfnn/network.pt'))  # TODO: 10.7
-    network = network.to(device)
-
-    lr = learning_rate
-    optim = SGD(network.parameters(), lr=lr, momentum=momentum, weight_decay=gamma)
-    logger.info("Network: %s, num_layer=%d, hidden=%d, filter=%d, tag_space=%d, crf=%s" % (mode, num_layers, hidden_size, num_filters, tag_space, 'bigram' if bigram else 'unigram'))
-    logger.info("training: l2: %f, (#training data: %d, batch: %d, unk replace: %.2f)" % (gamma, num_data, batch_size, unk_replace))
-    logger.info("dropout(in, out, rnn): (%.2f, %.2f, %s)" % (p_in, p_out, p_rnn))
-
-    num_batches = num_data / batch_size + 1
-    dev_correct = 0.0
-    best_epoch = 0
-    test_correct = 0.0
-    test_total = 0
-    num_epochs = 0
-    for epoch in range(1, num_epochs + 1):
-        print('Epoch %d (%s(%s), learning rate=%.4f, decay rate=%.4f (schedule=%d)): ' % (epoch, mode, args.dropout, lr, decay_rate, schedule))
-        train_err = 0.
-        train_total = 0.
-
-        start_time = time.time()
-        num_back = 0
-        network.train()
-        # num_batches = 3
-
-        for batch in range(1, num_batches + 1):
-            word, char, labels, _, _, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
-
-            optim.zero_grad()
-            loss = network.loss(word, char, labels, mask=masks)
-            loss.backward()
-            optim.step()
-
-            with torch.no_grad():
-                num_inst = word.size(0)
-                train_err += loss * num_inst
-                train_total += num_inst
-
-            time_ave = (time.time() - start_time) / batch
-            time_left = (num_batches - batch) * time_ave
-
-            # update log
-            if batch % 100 == 0:
-                sys.stdout.write("\b" * num_back)
-                sys.stdout.write(" " * num_back)
-                sys.stdout.write("\b" * num_back)
-                log_info = 'train: %d/%d loss: %.4f, time left (estimated): %.2fs' % (batch, num_batches, train_err / train_total, time_left)
-                sys.stdout.write(log_info)
-                sys.stdout.flush()
-                num_back = len(log_info)
-
-        sys.stdout.write("\b" * num_back)
-        sys.stdout.write(" " * num_back)
-        sys.stdout.write("\b" * num_back)
-        print('train: %d loss: %.4f, time: %.2fs' % (num_batches, train_err / train_total, time.time() - start_time))
-        model_name = os.path.join(args.model_path, args.model_name)
-        torch.save(network.state_dict(), model_name)
-        # evaluate performance on dev data
-        with torch.no_grad():
-            network.eval()
-            dev_corr = 0.0
-            dev_total = 0
-            for batch in conllx_data.iterate_batch_tensor(data_dev, batch_size):
-                word, char, labels, _, _, masks, lengths = batch
-                preds, corr = network.decode(word, char, target=labels, mask=masks, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                num_tokens = masks.sum()
-                dev_corr += corr
-                dev_total += num_tokens
-
-            print('dev corr: %d, total: %d, acc: %.2f%%' % (dev_corr, dev_total, dev_corr * 100 / dev_total))
-
-            if dev_correct < dev_corr:
-                dev_correct = dev_corr
-                best_epoch = epoch
-
-                # evaluate on test data when better performance detected
-                test_corr = 0.0
-                test_total = 0
-                for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):
-                    word, char, labels, _, _, masks, lengths = batch
-                    preds, corr = network.decode(word, char, target=labels, mask=masks, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                    num_tokens = masks.sum()
-                    test_corr += corr
-                    test_total += num_tokens
-
-                test_correct = test_corr
-            print("best dev  corr: %d, total: %d, acc: %.2f%% (epoch: %d)" % (dev_correct, dev_total, dev_correct * 100 / dev_total, best_epoch))
-            print("best test corr: %d, total: %d, acc: %.2f%% (epoch: %d)" % (test_correct, test_total, test_correct * 100 / test_total, best_epoch))
-
-        if epoch % schedule == 0:
-            lr = learning_rate / (1.0 + epoch * decay_rate)
-            optim = SGD(network.parameters(), lr=lr, momentum=momentum, weight_decay=gamma, nesterov=True)
+    # print('Pretrain tagging model.')
+    # if args.treebank == 'ptb':
+    #     network.load_state_dict(torch.load('tagging_models/tagging/crfnn/network.pt'))  # TODO: 10.7
+    # elif args.treebank == 'ctb':
+    #     network.load_state_dict(torch.load('tagging_ctb_models/tagging/crfnn/network.pt'))  # TODO: 10.7
+    # network = network.to(device)
+    #
+    # lr = learning_rate
+    # optim = SGD(network.parameters(), lr=lr, momentum=momentum, weight_decay=gamma)
+    # logger.info("Network: %s, num_layer=%d, hidden=%d, filter=%d, tag_space=%d, crf=%s" % (mode, num_layers, hidden_size, num_filters, tag_space, 'bigram' if bigram else 'unigram'))
+    # logger.info("training: l2: %f, (#training data: %d, batch: %d, unk replace: %.2f)" % (gamma, num_data, batch_size, unk_replace))
+    # logger.info("dropout(in, out, rnn): (%.2f, %.2f, %s)" % (p_in, p_out, p_rnn))
+    #
+    # dev_correct = 0.0
+    # best_epoch = 0
+    # test_correct = 0.0
+    # test_total = 0
+    # num_epochs = 0
+    # for epoch in range(1, num_epochs + 1):
+    #     print('Epoch %d (%s(%s), learning rate=%.4f, decay rate=%.4f (schedule=%d)): ' % (epoch, mode, args.dropout, lr, decay_rate, schedule))
+    #     train_err = 0.
+    #     train_total = 0.
+    #
+    #     start_time = time.time()
+    #     num_back = 0
+    #     network.train()
+    #     # num_batches = 3
+    #
+    #     for batch in range(1, num_batches + 1):
+    #         word, char, labels, _, _, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
+    #
+    #         optim.zero_grad()
+    #         loss = network.loss(word, char, labels, mask=masks)
+    #         loss.backward()
+    #         optim.step()
+    #
+    #         with torch.no_grad():
+    #             num_inst = word.size(0)
+    #             train_err += loss * num_inst
+    #             train_total += num_inst
+    #
+    #         time_ave = (time.time() - start_time) / batch
+    #         time_left = (num_batches - batch) * time_ave
+    #
+    #         # update log
+    #         if batch % 100 == 0:
+    #             sys.stdout.write("\b" * num_back)
+    #             sys.stdout.write(" " * num_back)
+    #             sys.stdout.write("\b" * num_back)
+    #             log_info = 'train: %d/%d loss: %.4f, time left (estimated): %.2fs' % (batch, num_batches, train_err / train_total, time_left)
+    #             sys.stdout.write(log_info)
+    #             sys.stdout.flush()
+    #             num_back = len(log_info)
+    #
+    #     sys.stdout.write("\b" * num_back)
+    #     sys.stdout.write(" " * num_back)
+    #     sys.stdout.write("\b" * num_back)
+    #     print('train: %d loss: %.4f, time: %.2fs' % (num_batches, train_err / train_total, time.time() - start_time))
+    #     model_name = os.path.join(args.model_path, args.model_name)
+    #     torch.save(network.state_dict(), model_name)
+    #     # evaluate performance on dev data
+    #     with torch.no_grad():
+    #         network.eval()
+    #         dev_corr = 0.0
+    #         dev_total = 0
+    #         for batch in conllx_data.iterate_batch_tensor(data_dev, batch_size):
+    #             word, char, labels, _, _, masks, lengths = batch
+    #             preds, corr = network.decode(word, char, target=labels, mask=masks, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+    #             num_tokens = masks.sum()
+    #             dev_corr += corr
+    #             dev_total += num_tokens
+    #
+    #         print('dev corr: %d, total: %d, acc: %.2f%%' % (dev_corr, dev_total, dev_corr * 100 / dev_total))
+    #
+    #         if dev_correct < dev_corr:
+    #             dev_correct = dev_corr
+    #             best_epoch = epoch
+    #
+    #             # evaluate on test data when better performance detected
+    #             test_corr = 0.0
+    #             test_total = 0
+    #             for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):
+    #                 word, char, labels, _, _, masks, lengths = batch
+    #                 preds, corr = network.decode(word, char, target=labels, mask=masks, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+    #                 num_tokens = masks.sum()
+    #                 test_corr += corr
+    #                 test_total += num_tokens
+    #
+    #             test_correct = test_corr
+    #         print("best dev  corr: %d, total: %d, acc: %.2f%% (epoch: %d)" % (dev_correct, dev_total, dev_correct * 100 / dev_total, best_epoch))
+    #         print("best test corr: %d, total: %d, acc: %.2f%% (epoch: %d)" % (test_correct, test_total, test_correct * 100 / test_total, best_epoch))
+    #
+    #     if epoch % schedule == 0:
+    #         lr = learning_rate / (1.0 + epoch * decay_rate)
+    #         optim = SGD(network.parameters(), lr=lr, momentum=momentum, weight_decay=gamma, nesterov=True)
 
 
     # Pretrain seq2seq model using denoising autoencoder. model name: seq2seq model
-    print('Pretrain seq2seq model using denoising autoencoder.')
-    EPOCHS = 0  # 150
-    DECAY = 0.97
+    # print('Pretrain seq2seq model using denoising autoencoder.')
+    # EPOCHS = 0  # 150
+    # DECAY = 0.97
+
     shared_word_embedd = network.return_word_embedd()
     shared_word_embedd.weight.requires_grad = False
     num_words = word_alphabet.size()
@@ -264,108 +295,106 @@ def main():
     seq2seq.emb.weight.requires_grad = False
     print(seq2seq)
 
-    loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
-    parameters_need_update = filter(lambda p: p.requires_grad, seq2seq.parameters())
-    optim_seq2seq = torch.optim.Adam(parameters_need_update, lr=0.0002)
-    if args.treebank == 'ptb':
-        seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))  # TODO: 10.7
-        seq2seq.to(device)
-        network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))  # TODO: 10.7
-        network.to(device)
-    # elif args.treebank == 'ctb':
-    #     seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(7) + '.pt'))  # TODO: 10.7
-    #     seq2seq.to(device)
-    #     network.load_state_dict(torch.load(args.network_load_path + str(7) + '.pt'))  # TODO: 10.7
-    #     network.to(device)
+    # loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
+    # parameters_need_update = filter(lambda p: p.requires_grad, seq2seq.parameters())
+    # optim_seq2seq = torch.optim.Adam(parameters_need_update, lr=0.0002)
 
-    for i in range(EPOCHS):
-        ls_seq2seq_ep = 0
-        seq2seq.train()
-        network.train()
-        seq2seq.emb.weight.requires_grad = False
-        print('----------'+str(i)+' iter----------')
-        # num_batches = 3
-        for _ in range(1, num_batches + 1):
-            word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size,
-                                                                                         unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
-            inp, _ = seq2seq.add_noise(word, lengths)
-            dec_out = word
-            dec_inp = torch.cat((word[:,0:1], word[:,0:-1]), dim=1)  # maybe wrong
-            # train_seq2seq
-            out = seq2seq(inp.long().to(device), is_tr=True, dec_inp=dec_inp.long().to(device))
-
-            out = out.view((out.shape[0] * out.shape[1], out.shape[2]))
-            dec_out = dec_out.view((dec_out.shape[0] * dec_out.shape[1],))
-            wgt = seq2seq.add_stop_token(masks, lengths)
-            wgt = wgt.view((wgt.shape[0] * wgt.shape[1],)).float().to(device)
-
-            ls_seq2seq_bh = loss_seq2seq(out, dec_out.long().to(device))
-            ls_seq2seq_bh = (ls_seq2seq_bh * wgt).sum() / wgt.sum()
-
-            optim_seq2seq.zero_grad()
-            ls_seq2seq_bh.backward()
-            optim_seq2seq.step()
-
-            ls_seq2seq_bh = ls_seq2seq_bh.cpu().detach().numpy()
-            ls_seq2seq_ep += ls_seq2seq_bh
-        print('ls_seq2seq_ep: ', ls_seq2seq_ep)
-        for pg in optim_seq2seq.param_groups:
-            pg['lr'] *= DECAY
-
-        # test th bleu of seq2seq
-        if True: #i%1 == 0:
-            seq2seq.eval()
-            network.eval()
-            bleu_ep = 0
-            acc_numerator_ep = 0
-            acc_denominator_ep = 0
-            testi = 0
-            for batch in conllx_data.iterate_batch_tensor(data_dev, batch_size):   # for _ in range(1, num_batches + 1):  word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_dev, batch_size, unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
-                word, char, pos, heads, types, masks, lengths = batch
-                inp = word
-                # inp, _ = seq2seq.add_noise(word, lengths)
-                dec_out = word
-                sel, _ = seq2seq(inp.long().to(device), LEN=inp.size()[1])
-                sel = sel.detach().cpu().numpy()
-                dec_out = dec_out.cpu().numpy()
-
-                bleus = []
-                for j in range(sel.shape[0]):
-                    bleu = get_bleu(sel[j], dec_out[j], num_words)  # sel
-                    bleus.append(bleu)
-                    numerator, denominator = get_correct(sel[j], dec_out[j], num_words)
-                    acc_numerator_ep += numerator
-                    acc_denominator_ep += denominator #.detach().cpu().numpy() TODO: 10.8
-                bleu_bh = np.average(bleus)
-                bleu_ep += bleu_bh
-                testi += 1
-            bleu_ep /= testi  #num_batches
-            print('testi: ', testi)
-            print('Valid bleu: %.4f%%' % (bleu_ep * 100))
-            # print(acc_denominator_ep)
-            print('Valid acc: %.4f%%' % ((acc_numerator_ep*1.0/acc_denominator_ep) * 100))
-        # for debug TODO:
-        if i > 0:
-            torch.save(seq2seq.state_dict(), args.seq2seq_save_path + str(i) + '.pt')
-            torch.save(network.state_dict(), args.network_save_path + str(i) + '.pt')
+    #
+    # for i in range(EPOCHS):
+    #     ls_seq2seq_ep = 0
+    #     seq2seq.train()
+    #     network.train()
+    #     seq2seq.emb.weight.requires_grad = False
+    #     print('----------'+str(i)+' iter----------')
+    #     # num_batches = 3
+    #     for _ in range(1, num_batches + 1):
+    #         word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size,
+    #                                                                                      unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
+    #         inp, _ = seq2seq.add_noise(word, lengths)
+    #         dec_out = word
+    #         dec_inp = torch.cat((word[:,0:1], word[:,0:-1]), dim=1)  # maybe wrong
+    #         # train_seq2seq
+    #         out = seq2seq(inp.long().to(device), is_tr=True, dec_inp=dec_inp.long().to(device))
+    #
+    #         out = out.view((out.shape[0] * out.shape[1], out.shape[2]))
+    #         dec_out = dec_out.view((dec_out.shape[0] * dec_out.shape[1],))
+    #         wgt = seq2seq.add_stop_token(masks, lengths)
+    #         wgt = wgt.view((wgt.shape[0] * wgt.shape[1],)).float().to(device)
+    #
+    #         ls_seq2seq_bh = loss_seq2seq(out, dec_out.long().to(device))
+    #         ls_seq2seq_bh = (ls_seq2seq_bh * wgt).sum() / wgt.sum()
+    #
+    #         optim_seq2seq.zero_grad()
+    #         ls_seq2seq_bh.backward()
+    #         optim_seq2seq.step()
+    #
+    #         ls_seq2seq_bh = ls_seq2seq_bh.cpu().detach().numpy()
+    #         ls_seq2seq_ep += ls_seq2seq_bh
+    #     print('ls_seq2seq_ep: ', ls_seq2seq_ep)
+    #     for pg in optim_seq2seq.param_groups:
+    #         pg['lr'] *= DECAY
+    #
+    #     # test th bleu of seq2seq
+    #     if True: #i%1 == 0:
+    #         seq2seq.eval()
+    #         network.eval()
+    #         bleu_ep = 0
+    #         acc_numerator_ep = 0
+    #         acc_denominator_ep = 0
+    #         testi = 0
+    #         for batch in conllx_data.iterate_batch_tensor(data_dev, batch_size):   # for _ in range(1, num_batches + 1):  word, char, pos, heads, types, masks, lengths = conllx_data.get_batch_tensor(data_dev, batch_size, unk_replace=unk_replace)  # word:(32,50)  char:(32,50,35)
+    #             word, char, pos, heads, types, masks, lengths = batch
+    #             inp = word
+    #             # inp, _ = seq2seq.add_noise(word, lengths)
+    #             dec_out = word
+    #             sel, _ = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+    #             sel = sel.detach().cpu().numpy()
+    #             dec_out = dec_out.cpu().numpy()
+    #
+    #             bleus = []
+    #             for j in range(sel.shape[0]):
+    #                 bleu = get_bleu(sel[j], dec_out[j], num_words)  # sel
+    #                 bleus.append(bleu)
+    #                 numerator, denominator = get_correct(sel[j], dec_out[j], num_words)
+    #                 acc_numerator_ep += numerator
+    #                 acc_denominator_ep += denominator #.detach().cpu().numpy() TODO: 10.8
+    #             bleu_bh = np.average(bleus)
+    #             bleu_ep += bleu_bh
+    #             testi += 1
+    #         bleu_ep /= testi  #num_batches
+    #         print('testi: ', testi)
+    #         print('Valid bleu: %.4f%%' % (bleu_ep * 100))
+    #         # print(acc_denominator_ep)
+    #         print('Valid acc: %.4f%%' % ((acc_numerator_ep*1.0/acc_denominator_ep) * 100))
+    #     # for debug TODO:
+    #     if i > 0:
+    #         torch.save(seq2seq.state_dict(), args.seq2seq_save_path + str(i) + '.pt')
+    #         torch.save(network.state_dict(), args.network_save_path + str(i) + '.pt')
 
     print('Train seq2seq model using rl with reward of biaffine.')
 
-    sudo_golden_tagger = SennaTagger('/home/hanwj/PycharmProjects/structure_adv/tagging_models/senna')
-    sudo_golden_tagger_1 = StanfordPOSTagger(model_filename='/home/hanwj/PycharmProjects/structure_adv/tagging_models/stanford-postagger-2018-10-16/models/english-bidirectional-distsim.tagger', path_to_jar='/home/hanwj/PycharmProjects/structure_adv/tagging_models/stanford-postagger-2018-10-16/stanford-postagger.jar')
+    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))  # TODO: 10.7
+    seq2seq.to(device)
+    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))  # TODO: 10.7
+    network.to(device)
 
-    EPOCHS = 80
+    sudo_golden_tagger = SennaTagger(parser_b)
+    sudo_golden_tagger_1 = StanfordPOSTagger(model_filename=parser_c + '/models/english-bidirectional-distsim.tagger',
+                                             path_to_jar=parser_c + '/stanford-postagger.jar')
+
+    EPOCHS = num_epochs
     DECAY = 0.97
     M = 1  # this is the size of beam searching ?
     seq2seq.emb.weight.requires_grad = False
     parameters_need_update = filter(lambda p: p.requires_grad, seq2seq.parameters())
-    optim_bia_rl = torch.optim.Adam(parameters_need_update, lr=1e-5)  #1e-5 0.00005
-    loss_biaf_rl = TagLossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words).to(device)
+    optim_bia_rl = torch.optim.Adam(parameters_need_update, lr=learning_rate, )  #1e-5 0.00005
+    loss_biaf_rl = TagLossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words, port=port).to(device)
 
-    seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(1) + '.pt'))  # TODO: 7.13
-    seq2seq.to(device)
-    network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(1) + '.pt'))  # TODO: 7.13
-    network.to(device)
+    num_batches = num_data / batch_size + 1
+    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(1) + '.pt'))  # TODO: 7.13
+    # seq2seq.to(device)
+    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(1) + '.pt'))  # TODO: 7.13
+    # network.to(device)
 
     def word_to_chars_tensor(shape, sel, lengths_sel, word_alphabet, char_alphabet):
         batch_s, stc_length, char_length = shape
@@ -379,28 +408,28 @@ def main():
                     char_length - len(temp))]  # temp + np.ones(char_length-len(temp), dtype=int)
         return torch.from_numpy(chars).to(device) #torch.tensor(chars, dtype=int)
 
-    parser_select = ['tagger0', 'tagger1']
 
     for epoch_i in range(EPOCHS):
         print('======='+str(epoch_i)+'=========')
-        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
+        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = rewards6 = cnt = 0.0
         network.eval()  # only train seq2seq
         seq2seq.train()
         seq2seq.emb.weight.requires_grad = False
         END_token = word_alphabet.instance2index['_PAD']  # word_alphabet.get_instance('_PAD)==1  '_END'==3
         print('END_token: '+str(END_token))
-        kkkk = 256
-        if args.treebank == 'ptb':
-            batch_size = kkkk  # 10
-        elif args.treebank == 'ctb':
-            batch_size = 1
-        num_batches = 0 #(39831/2)/kkkk
+        # kkkk = 256
+        # if args.treebank == 'ptb':
+        #     batch_size = kkkk  # 10
+        # elif args.treebank == 'ctb':
+        #     batch_size = 1
+        # num_batches = 0 #(39831/2)/kkkk
         print('num_batches: ', str(num_batches))
         for kkk in range(1, num_batches + 1): #num_batches
-            print('-train--'+str(kkk)+'---')
-            # train_rl
-            if kkk==6:
-                print('two long time')
+            # print('-train--'+str(kkk)+'---')
+            # # train_rl
+            # if kkk==6:
+            #     print('two long time')
+            #     break
             word, char, labels, _, _, masks, lengths = conllx_data.get_batch_tensor(data_train, batch_size, unk_replace=unk_replace)
             inp = word
             if True:  #inp.size()[1]<15:#True:  #inp.size()[1]<15: #TODO: debug hanwj
@@ -443,7 +472,7 @@ def main():
                         print('IndexError Maybe: ', sel1.data.cpu().numpy())
                         print(masks_sel)
                         continue
-                ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=tags_pred, golden_out=labels, mask_id=END_token,
+                ls_rl_bh, reward1, reward2, reward3, reward4, reward5, reward6 = loss_biaf_rl(sel, pb, predicted_out=tags_pred, golden_out=labels, mask_id=END_token,
                                                                               stc_length_out=lengths_sel, sudo_golden_out=sudo_tags_pred, sudo_golden_out_1=sudo_tags_pred_1,
                                                                               ori_words=word, ori_words_length=lengths)  #sudo_heads_pred_1 TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
                 optim_bia_rl.zero_grad()
@@ -452,30 +481,33 @@ def main():
                 ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh
                 # ls1 = ls1.cpu().detach().numpy()
-                rewards1 += reward1
-                rewards2 += reward2
-                rewards3 += reward3
-                rewards4 += reward4
-                rewards5 += reward5
+                rewards1 += reward1 * word.size()[0]
+                rewards2 += reward2 * word.size()[0]
+                rewards3 += reward3 * word.size()[0]
+                rewards4 += reward4 * word.size()[0]
+                rewards5 += reward5 * word.size()[0]
+                rewards6 += reward6 * word.size()[0]
+                cnt += word.size()[0]
         if True:
             print('train loss: ', ls_rl_ep)
-            print('train reward parser b: ', rewards1)
-            print('train reward parser c: ', rewards2)
-            print('train reward parser b^c: ', rewards3)
-            print('train reward meaning: ', rewards4)
-            print('train reward fluency: ', rewards5)
+            print('train reward parser b: ', rewards1 / cnt)
+            print('train reward parser c: ', rewards2 / cnt)
+            print('train reward parser b^c: ', rewards3 / cnt)
+            print('train reward meaning: ', rewards4 / cnt)
+            print('train reward fluency: ', rewards5 / cnt)
+            print('train UNK rate: ', rewards6 / cnt)
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= DECAY
 
-        if epoch_i > 0:
-            torch.save(seq2seq.state_dict(), args.rl_finetune_seq2seq_save_path + str(epoch_i) + '.pt')
-            torch.save(network.state_dict(), args.rl_finetune_network_save_path + str(epoch_i) + '.pt')
+        if epoch_i >= 0:
+            torch.save(seq2seq.state_dict(), args.rl_finetune_seq2seq_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
+            torch.save(network.state_dict(), args.rl_finetune_network_save_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt')
 
         ####eval######
         if True:
             seq2seq.eval()
             network.eval()
-            ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = rewardsall1 = rewardsall2 = rewardsall3 = 0
+            ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = rewards6 = rewardsall1 = rewardsall2 = rewardsall3 = cnt =0
             pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
             if args.treebank == 'ptb':
                 pred_filename_test = 'tagging_dumped/pred_test%d' % (epoch_i)
@@ -504,9 +536,9 @@ def main():
             batch_size_for_eval = 3
             for batch in conllx_data.iterate_batch_tensor(data_test, batch_size_for_eval):  # batch_size
                 kk += 1
-                print('-------'+str(kk)+'-------')
-                if kk > 1:  # TODO:8.9
-                    break
+                # print('-------'+str(kk)+'-------')
+                # if kk > 1:
+                #     break
                 # if kk==7:
                 #     print('error here')
                 word, char, labels, _, _, masks, lengths = batch
@@ -565,27 +597,29 @@ def main():
                     #                                                           ori_words_length=lengths
                     #                                                           )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
 
-                    ls_rl_bh, _ , _ , _ , _ , _ , reward1, reward2, reward3, reward4, reward5, rewardall1, rewardall2, rewardall3 = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=tags_pred,
-                                                                                                                                                                 golden_out=labels, mask_id=END_token,
-                                                                                                                                                                 stc_length_out=lengths_sel,
-                                                                                                                                                                 sudo_golden_out=sudo_tags_pred,
-                                                                                                                                                                 sudo_golden_out_1=sudo_tags_pred_1,
-                                                                                                                                                                 ori_words=word,
-                                                                                                                                                                 ori_words_length=lengths
-                                                                                                                                                                 )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                    ls_rl_bh, _ , _ , _ , _ , _ , reward6 , \
+                    reward1, reward2, reward3, reward4, \
+                    reward5, rewardall1, rewardall2, \
+                    rewardall3 = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=tags_pred,golden_out=labels,
+                                                              mask_id=END_token,stc_length_out=lengths_sel,
+                                                              sudo_golden_out=sudo_tags_pred,
+                                                              sudo_golden_out_1=sudo_tags_pred_1,
+                                                              ori_words=word,
+                                                              ori_words_length=lengths)
+                    # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
 
-
-
+                cnt += word.size(0)
                 ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
-                ls_rl_ep += ls_rl_bh
-                rewards1 += reward1
-                rewards2 += reward2
-                rewards3 += reward3
-                rewards4 += reward4
-                rewards5 += reward5
-                rewardsall1 += rewardall1
-                rewardsall2 += rewardall2
-                rewardsall3 += rewardall3
+                ls_rl_ep += ls_rl_bh * word.size(0)
+                rewards1 += reward1 * word.size(0)
+                rewards2 += reward2 * word.size(0)
+                rewards3 += reward3 * word.size(0)
+                rewards4 += reward4 * word.size(0)
+                rewards5 += reward5 * word.size(0)
+                rewards6 += reward6 * word.size(0)
+                rewardsall1 += rewardall1 * word.size(0)
+                rewardsall2 += rewardall2 * word.size(0)
+                rewardsall3 += rewardall3 * word.size(0)
 
                 sel = sel.detach().cpu().numpy()
                 lengths_sel = lengths_sel.detach().cpu().numpy()
@@ -602,14 +636,14 @@ def main():
                 print('token_num: ')
                 print(token_num)
 
-            rewards1 = rewards1 * 1.0 / sum(data_test[1])
-            rewards2 = rewards2 * 1.0 / sum(data_test[1])
-            rewards3 = rewards3 * 1.0 / sum(data_test[1])
-            rewards4 = rewards4 * 1.0 / sum(data_test[1])
-            rewards5 = rewards5 * 1.0 / sum(data_test[1])
-            rewardsall1 = rewardsall1 * 1.0 / sum(data_test[1])
-            rewardsall2 = rewardsall2 * 1.0 / sum(data_test[1])
-            rewardsall3 = rewardsall3 * 1.0 / sum(data_test[1])
+            rewards1 = rewards1 * 1.0 / cnt
+            rewards2 = rewards2 * 1.0 / cnt
+            rewards3 = rewards3 * 1.0 / cnt
+            rewards4 = rewards4 * 1.0 / cnt
+            rewards5 = rewards5 * 1.0 / cnt
+            rewardsall1 = rewardsall1 * 1.0 / cnt
+            rewardsall2 = rewardsall2 * 1.0 / cnt
+            rewardsall3 = rewardsall3 * 1.0 / cnt
 
             nll /= token_num
 
@@ -619,6 +653,7 @@ def main():
             print('test metrics parser b^c: ', rewards3)
             print('test metrics meaning: ', rewards4)
             print('test metrics fluency: ', rewards5)
+            print('test metrics UNK rate: ', rewards6)
             print('test metrics whole parser b: ', rewardsall1)
             print('test metrics whole parser c: ', rewardsall2)
             print('test metrics whole parser b^c: ', rewardsall3)
