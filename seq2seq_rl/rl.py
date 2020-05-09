@@ -312,12 +312,18 @@ class LossBiafRL(nn.Module):
 
         wf = codecs.open(condsf, 'w', encoding='utf8')
         preds_tmp = [' '.join(i) for i in preds]
+        for i in range(len(preds_tmp)):
+            if len(preds_tmp[i]) == 0:
+                preds_tmp[i] = 'Blank line .'
         preds_s = '\n'.join(preds_tmp)
         wf.write(preds_s)
         wf.close()
 
         wf = codecs.open(refs, 'w', encoding='utf8')
         oris_tmp = [' '.join(i) for i in oris]
+        for i in range(len(oris_tmp)):
+            if len(preds_tmp[i]) == 0:
+                preds_tmp[i] = 'Blank line .'
         oris_s = '\n'.join(oris_tmp)
         wf.write(oris_s)
         wf.close()
@@ -497,12 +503,18 @@ class TagLossBiafRL(nn.Module): # parsers
 
         wf = codecs.open(condsf, 'w', encoding='utf8')
         preds_tmp = [' '.join(i) for i in preds]
+        for i in range(len(preds_tmp)):
+            if len(preds_tmp[i]) == 0:
+                preds_tmp[i] = 'Blank line .'
         preds_s = '\n'.join(preds_tmp)
         wf.write(preds_s)
         wf.close()
 
         wf = codecs.open(refs, 'w', encoding='utf8')
         oris_tmp = [' '.join(i) for i in oris]
+        for i in range(len(oris_tmp)):
+            if len(preds_tmp[i]) == 0:
+                preds_tmp[i] = 'Blank line .'
         oris_s = '\n'.join(oris_tmp)
         wf.write(oris_s)
         wf.close()
