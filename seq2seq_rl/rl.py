@@ -322,8 +322,8 @@ class LossBiafRL(nn.Module):
         wf = codecs.open(refs, 'w', encoding='utf8')
         oris_tmp = [' '.join(i) for i in oris]
         for i in range(len(oris_tmp)):
-            if len(preds_tmp[i]) == 0:
-                preds_tmp[i] = 'Blank line .'
+            if len(oris_tmp[i]) == 0:
+                oris_tmp[i] = 'Blank line .'
         oris_s = '\n'.join(oris_tmp)
         wf.write(oris_s)
         wf.close()
@@ -513,8 +513,8 @@ class TagLossBiafRL(nn.Module): # parsers
         wf = codecs.open(refs, 'w', encoding='utf8')
         oris_tmp = [' '.join(i) for i in oris]
         for i in range(len(oris_tmp)):
-            if len(preds_tmp[i]) == 0:
-                preds_tmp[i] = 'Blank line .'
+            if len(oris_tmp[i]) == 0:
+                oris_tmp[i] = 'Blank line .'
         oris_s = '\n'.join(oris_tmp)
         wf.write(oris_s)
         wf.close()
