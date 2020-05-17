@@ -391,9 +391,9 @@ def main():
     loss_biaf_rl = TagLossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words, port=port).to(device)
 
     num_batches = num_data / batch_size + 1
-    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(1) + '.pt'))  # TODO: 7.13
+    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + str(1) + '.pt'))
     # seq2seq.to(device)
-    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(1) + '.pt'))  # TODO: 7.13
+    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + str(1) + '.pt'))
     # network.to(device)
 
     def word_to_chars_tensor(shape, sel, lengths_sel, word_alphabet, char_alphabet):
@@ -425,7 +425,7 @@ def main():
         # num_batches = 0 #(39831/2)/kkkk
         print('num_batches: ', str(num_batches))
         for kkk in range(1, num_batches + 1): #num_batches
-            # print('-train--'+str(kkk)+'---')
+            print('-train--'+str(kkk)+'---')
             # # train_rl
             # if kkk==6:
             #     print('two long time')
@@ -509,12 +509,8 @@ def main():
             network.eval()
             ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = rewards6 = rewardsall1 = rewardsall2 = rewardsall3 = cnt =0
             pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-            if args.treebank == 'ptb':
-                pred_filename_test = 'tagging_dumped/pred_test%d' % (epoch_i)
-                src_filename_test = 'tagging_dumped/src_test%d' % (epoch_i)
-            elif args.treebank == 'ctb':
-                src_filename_test = 'tagging_ctb_dumped/src_test%d' % (epoch_i)
-                pred_filename_test = 'tagging_ctb_dumped/pred_test%d' % (epoch_i)
+            pred_filename_test = 'tagging_dumped/' + '_' + SCORE_PREFIX +'pred_test%d' % (epoch_i)
+            src_filename_test = 'tagging_dumped/' + '_' + SCORE_PREFIX +'src_test%d' % (epoch_i)
 
             pred_writer_test.start(pred_filename_test)
 
@@ -533,7 +529,7 @@ def main():
             nll = 0
             token_num = 0
             kk = 0
-            batch_size_for_eval = 3
+            batch_size_for_eval = 128
             for batch in conllx_data.iterate_batch_tensor(data_test, batch_size_for_eval):  # batch_size
                 kk += 1
                 # print('-------'+str(kk)+'-------')
@@ -542,22 +538,21 @@ def main():
                 # if kk==7:
                 #     print('error here')
                 word, char, labels, _, _, masks, lengths = batch
-                print('direct_eval: ')
-                print(args.direct_eval)
                 if not args.direct_eval:
-                    inp = word  #, _ = seq2seq.add_noise(word, lengths)
-                    sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
-                    end_position = torch.eq(sel, END_token).nonzero()
-                    masks_sel = torch.ones_like(sel, dtype=torch.float)
-                    lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
-                    if not len(end_position) == 0:
-                        ij_back = -1
-                        for ij in end_position:
-                            if not (ij[0]==ij_back):
-                                lengths_sel[ij[0]] = ij[1]
-                                masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of pad token in the end: 1
-                                ij_back = ij[0]
-                    char1 = word_to_chars_tensor(char.shape, sel, lengths_sel, word_alphabet, char_alphabet)
+                    with torch.no_grad():
+                        inp = word  #, _ = seq2seq.add_noise(word, lengths)
+                        sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+                        end_position = torch.eq(sel, END_token).nonzero()
+                        masks_sel = torch.ones_like(sel, dtype=torch.float)
+                        lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                        if not len(end_position) == 0:
+                            ij_back = -1
+                            for ij in end_position:
+                                if not (ij[0]==ij_back):
+                                    lengths_sel[ij[0]] = ij[1]
+                                    masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of pad token in the end: 1
+                                    ij_back = ij[0]
+                        char1 = word_to_chars_tensor(char.shape, sel, lengths_sel, word_alphabet, char_alphabet)
                 else:
                     sel = word
                     pb = torch.ones_like(sel, dtype=torch.float).fill_(0)
@@ -633,8 +628,6 @@ def main():
                 for i in range(len(lengths_sel)):
                     nll += sum(pb[i, 1:lengths_sel[i]])
                 token_num += sum(lengths_sel)#-len(lengths_sel)
-                print('token_num: ')
-                print(token_num)
 
             rewards1 = rewards1 * 1.0 / cnt
             rewards2 = rewards2 * 1.0 / cnt
