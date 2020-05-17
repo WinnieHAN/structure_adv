@@ -326,11 +326,11 @@ def main():
     # Begin generate
     for prefix in args.prefix:
         # load pretrained model
-        # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + prefix + '.pt'))
-        seq2seq.load_state_dict(torch.load('models/seq2seq/seq2seq_save_model2.pt'))
+        seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + prefix + '.pt'))
+        # seq2seq.load_state_dict(torch.load('models/seq2seq/seq2seq_save_model2.pt'))
         seq2seq.to(device)
-        # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + prefix + '.pt'))
-        network.load_state_dict(torch.load('models/seq2seq/network_save_model2.pt'))
+        network.load_state_dict(torch.load(args.rl_finetune_network_load_path + prefix + '.pt'))
+        # network.load_state_dict(torch.load('models/seq2seq/network_save_model2.pt'))
         network.to(device)
 
         network.eval()
@@ -436,8 +436,8 @@ def main():
                         pass
             # if len(generation_res) > 10:
             #     break
-                if cnt > 500:
-                    break
+            #     if cnt > 500:
+            #         break
         print('=='*10 + prefix + '=='*10)
         print('Total cnt: ' + str(cnt))
         print("-"*10)
