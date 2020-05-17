@@ -529,7 +529,7 @@ def main():
             print('train reward parser b^c: ', rewards3 / train_num)
             print('train reward meaning: ', rewards4 / train_num)
             print('train reward fluency: ', rewards5 / train_num)
-            print('train UNK score: ', reward6 / train_num)
+            print('train UNK score: ', rewards6 / train_num)
         for pg in optim_bia_rl.param_groups:
             pg['lr'] *= decay_rate
 
@@ -542,25 +542,34 @@ def main():
         seq2seq.eval()
         network.eval()
         with torch.no_grad():
-            ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = 0
-            pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+            ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = \
+                zlw_rewards1 = zlw_rewards2 = zlw_rewards3 = rewardsall1 = rewardsall2 = rewardsall3 = 0
             if args.treebank == 'ptb':
                 pred_filename_test = 'dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
                 src_filename_test = 'dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
             elif args.treebank == 'ctb':
                 src_filename_test = 'ctb_dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
                 pred_filename_test = 'ctb_dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
-
+            pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
             pred_writer_test.start(pred_filename_test)
 
             src_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
             src_writer_test.start(src_filename_test)
 
+            pred_parse_writer_testA = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+            pred_parse_writer_testA.start(pred_filename_test + '_parseA.txt')
+
+            pred_parse_writer_testB = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+            pred_parse_writer_testB.start(pred_filename_test + '_parseB.txt')
+
+            pred_parse_writer_testC = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+            pred_parse_writer_testC.start(pred_filename_test + '_parseC.txt')
+
             nll = 0
             token_num = 0
             kk = 0
-            # batch_size_for_eval = 1
-            for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
+            batch_size_for_eval = 32
+            for batch in conllx_data.iterate_batch_tensor(data_test, batch_size_for_eval):  # batch_size
 
                 kk += 1
                 # print('-------' + str(kk) + '-------')
@@ -616,30 +625,32 @@ def main():
                     else:
                         raise ValueError('Error second parser select code!')
 
-                ls_rl_bh, reward1, reward2, reward3, reward4, reward5, reward6 = loss_biaf_rl(sel, pb,
-                                                                                              predicted_out=heads_pred,
-                                                                                              golden_out=heads,
-                                                                                              mask_id=END_token,
-                                                                                              stc_length_out=lengths_sel,
-                                                                                              sudo_golden_out=sudo_heads_pred,
-                                                                                              sudo_golden_out_1=sudo_heads_pred_1,
-                                                                                              ori_words=word,
-                                                                                              ori_words_length=lengths
-                                                                                              )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                    res = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=heads_pred, golden_out=heads,
+                                                       mask_id=END_token, stc_length_out=lengths_sel,
+                                                       sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1,
+                                                       ori_words=word, ori_words_length=lengths)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
 
                 ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh
-                rewards1 += reward1 * sel.shape[0]
-                rewards2 += reward2 * sel.shape[0]
-                rewards3 += reward3 * sel.shape[0]
-                rewards4 += reward4 * sel.shape[0]
-                rewards5 += reward5 * sel.shape[0]
-                rewards6 += reward6 * sel.shape[0]
+                rewards1 += res['sum_me1']
+                rewards2 += res['sum_me2']
+                rewards3 += res['sum_me3']
+                rewards4 += res['sum_me4']
+                rewards5 += res['sum_me5']
+                rewardsall1 += res['sum_me1all']
+                rewardsall2 += res['sum_me2all']
+                rewardsall3 += res['sum_me3all']
+                zlw_rewards1 += res['cnt_me1']
+                zlw_rewards2 += res['cnt_me2']
+                zlw_rewards3 += res['cnt_me3']
                 sel = sel.detach().cpu().numpy()
                 lengths_sel = lengths_sel.detach().cpu().numpy()
                 # print(sel)
                 pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
                 src_writer_test.write_stc(word, lengths, symbolic_root=True)
+                pred_parse_writer_testA.write(sel, sel, heads_pred, types_pred, lengths_sel,symbolic_root=True)
+                pred_parse_writer_testB.write(sel, sel, sudo_heads_pred, types_pred, lengths_sel,symbolic_root=True)
+                pred_parse_writer_testC.write(sel, sel, sudo_heads_pred_1, types_pred, lengths_sel,symbolic_root=True)
 
                 test_num += sel.shape[0]
 
@@ -648,19 +659,39 @@ def main():
                 token_num += sum(lengths_sel) - len(lengths_sel)
             # nll /= token_num
 
+        rewards1 = rewards1 * 1.0 / sum(data_test[1])
+        rewards2 = rewards2 * 1.0 / sum(data_test[1])
+        rewards3 = rewards3 * 1.0 / sum(data_test[1])
+        rewards4 = rewards4 * 1.0 / sum(data_test[1])
+        rewards5 = rewards5 * 1.0 / sum(data_test[1])
+        rewardsall1 = rewardsall1 * 1.0 / sum(data_test[1])
+        rewardsall2 = rewardsall2 * 1.0 / sum(data_test[1])
+        rewardsall3 = rewardsall3 * 1.0 / sum(data_test[1])
+        zlw_rewards1 = zlw_rewards1 * 1.0 / token_num
+        zlw_rewards2 = zlw_rewards2 * 1.0 / token_num
+        zlw_rewards3 = 1 - zlw_rewards3 * 1.0 / token_num
         print('test loss: ', ls_rl_ep)
-        print('test reward parser b: ', rewards1 / test_num)
-        print('test reward parser c: ', rewards2 / test_num)
-        print('test reward parser b^c: ', rewards3 / test_num)
-        print('test reward meaning: ', rewards4 / test_num)
-        print('test reward fluency: ', rewards5 / test_num)
-        print('test UNK score: ', rewards6 / test_num)
+        print('test reward parser b: ', rewards1)
+        print('test zlw reward parser b: ', zlw_rewards1)
+        print('test reward parser c: ', rewards2)
+        print('test zlw reward parser c: ', zlw_rewards2)
+        print('test reward parser b^c: ', rewards3)
+        print('test zlw reward parser b^c: ', zlw_rewards3)
+        print('test reward meaning: ', rewards4)
+        print('test reward fluency: ', rewards5)
+
+        print('test metrics whole parser b: ', rewardsall1)
+        print('test metrics whole parser c: ', rewardsall2)
+        print('test metrics whole parser b^c: ', rewardsall3)
 
         print('test nll: ', nll)
 
         pred_writer_test.close()
         src_writer_test.close()
-
+        pred_parse_writer_testA.close()
+        pred_parse_writer_testB.close()
+        pred_parse_writer_testC.close()
+        break
 
 if __name__ == '__main__':
     main()

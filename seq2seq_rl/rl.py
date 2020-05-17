@@ -276,6 +276,20 @@ class LossBiafRL(nn.Module):
 
         return reward
 
+    def get_same_bc(self, out, dec_out, dec_out_1, length_out, ori_words, ori_words_length):
+        stc_dda = sum([1 if out[i] == dec_out[i] == dec_out_1[i] else 0 for i in range(1, length_out)])
+
+        reward = stc_dda
+
+        return reward
+
+    def get_diff_bc(self, dec_out, dec_out_1, out, length_out, ori_words, ori_words_length):
+        stc_dda = sum([0 if out[i] == dec_out[i] == dec_out_1[i] else 1 for i in range(1, length_out)])
+
+        reward = stc_dda
+
+        return reward
+
     def get_bertscore_ppl(self, ori_words, ori_words_length, sel, stc_length_out):
 
         self.write_text(ori_words, ori_words_length, sel, stc_length_out)
@@ -425,6 +439,150 @@ class LossBiafRL(nn.Module):
                np.average(unk_rewards) * global_variables.UNK_REWARD_WEIGHT #loss, ls, ls1, bleu, bleu1
 
 
+    def forward_verbose(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out, sudo_golden_out_1, ori_words, ori_words_length):
+
+        list_stc_length_out = stc_length_out.cpu().numpy().tolist()
+
+        ####1####
+        batch = sel.shape[0]
+        rewards_z1 = []
+        metrics1 = []
+        metricsall1 = []
+        for i in range(batch):  #batch
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            rewards_z1.append(reward)
+            metrics1.append(1.0-(reward*1.0/(list_stc_length_out[i]-1)))
+            allsame = 1 if reward == 0 else 0
+            metricsall1.append(allsame)
+        rewards_z1 = np.asarray(rewards_z1)
+        metrics1 = np.asarray(metrics1)
+        metricsall1 = np.asarray(metricsall1)
+
+        #####2####
+        batch = sel.shape[0]
+        rewards_z2 = []
+        metrics2 = []
+        metricsall2 = []
+        for i in range(batch):  #batch
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            rewards_z2.append(reward)
+            metrics2.append(1.0-(reward*1.0/(list_stc_length_out[i]-1)))
+            allsame = 1 if reward==0 else 0
+            metricsall2.append(allsame)
+        rewards_z2 = np.asarray(rewards_z2)
+        metrics2 = np.asarray(metrics2)
+        metricsall2 = np.asarray(metricsall2)
+
+        #####3####
+        batch = sel.shape[0]
+        rewards_z3 = []
+        metrics3 = []
+        cnt_misc3 = []
+        metricsall3 = []
+        for i in range(batch):  #batch
+            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            metric3 = self.get_same_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], stc_length_out[i], ori_words[i],ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
+
+            stc_diff = self.get_diff_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
+            rewards_z3.append(reward)
+            metrics3.append(metric3*1.0/(list_stc_length_out[i]-1))
+            cnt_misc3.append(metric3*1.0)
+            allsame = 1 if stc_diff==0 else 0
+            metricsall3.append(allsame)
+        rewards_z3 = np.asarray(rewards_z3)
+        metrics3 = np.array(metrics3)
+        cnt_misc3 = np.array(cnt_misc3)
+        metricsall3 = np.asarray(metricsall3)
+
+        ####3#####add meaning_preservation as reward
+        batch = sel.shape[0]
+        # self.write_text(ori_words, ori_words_length, sel, stc_length_out)
+        # os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
+        # meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')*100
+        # logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt') # * (-0.1)
+        # ppl = -np.exp(logppl) * 0.001
+        meaning_preservation, logppl = self.get_bertscore_ppl(ori_words, ori_words_length, sel, stc_length_out)
+        meaning_preservation = np.array(meaning_preservation)
+        ppl = -np.exp(np.array(logppl))
+        metrics4 = meaning_preservation
+        metrics5 = logppl
+
+        # rewards = meaning_preservation * 10  # affect more
+
+        # bleus_w = []
+        # for i in range(batch):
+        #     bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
+        #
+        #     bleus_w.append(bleu)
+        # bleus_w = np.asarray(bleus_w)
+
+        unk_rewards = []
+        list_sel = sel.cpu().float().numpy().tolist()
+        for i in range(batch):
+            reward = self.get_unk_rate(list_sel[i], list_stc_length_out[i])
+            unk_rewards.append(-1 * reward)
+        unk_rewards = np.asarray(unk_rewards)
+
+        #-----------------------------------------------
+
+        rewards = (meaning_preservation * global_variables.MP_REWARD_WEIGHT +
+                   ppl * global_variables.PPL_REWARD_WEIGHT +
+                   rewards_z1 * global_variables.Z1_REWARD_WEIGHT +
+                   rewards_z2 * global_variables.Z2_REWARD_WEIGHT +
+                   rewards_z3 * global_variables.Z3_REWARD_WEIGHT +
+                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
+        # rewards = bleus_w * 10  # 8.26
+
+        ls3 = 0
+        cnt3 = 0
+        stc_length_seq = sel.shape[1]
+        for j in range(stc_length_seq):
+            wgt3 = np.asarray([1 if j < min(stc_length_out[i]+1, stc_length_seq) else 0 for i in range(batch)])  # consider in STOP token
+            ls3 += (- pb[:, j] *
+                    torch.from_numpy(rewards-self.bl).float().to(self.device) *  # rewards-self.bl
+                    torch.from_numpy(wgt3.astype(float)).float().to(self.device)).sum()
+            cnt3 += np.sum(wgt3)
+
+        ls3 /= cnt3
+        rewards_ave3 = np.average(rewards)
+        self.bl = (self.bl * self.bn + rewards_ave3) / (self.bn + 1)
+        self.bn += 1
+
+
+        loss = ls3
+
+        # print('rewards_z1: ', np.average(rewards_z1))
+        # print('rewards_z2: ', np.average(rewards_z2))
+        # print('meaning_preservation: ', np.average(meaning_preservation))
+        # print('ppl: ', np.average(ppl))
+
+        # loss = ls1
+        res = {}
+        res['loss'] = loss
+        res['avg_z1'] = np.average(rewards_z1)
+        res['avg_z2'] = np.average(rewards_z2)
+        res['avg_z3'] = np.average(rewards_z3)
+        res['avg_mp'] = np.average(meaning_preservation)
+        res['avg_ppl'] = np.average(ppl)
+        res['abg_unk'] = np.average(unk_rewards)
+        res['sum_me1'] = np.sum(metrics1)
+        res['sum_me2'] = np.sum(metrics2)
+        res['sum_me3'] = np.sum(metrics3)
+        res['sum_me4'] = np.sum(metrics4)
+        res['sum_me5'] = np.sum(metrics5)
+        res['cnt_me1'] = np.sum(rewards_z1)
+        res['cnt_me2'] = np.sum(rewards_z2)
+        res['cnt_me3'] = np.sum(cnt_misc3)
+
+        res['sum_me1all'] = np.sum(metricsall1)
+        res['sum_me2all'] = np.sum(metricsall2)
+        res['sum_me3all'] = np.sum(metricsall3)
+
+
+        return res
+
+        # return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(rewards_z3), np.average(meaning_preservation), np.average(ppl) , np.sum(metrics1), np.sum(metrics2), np.sum(metrics3), np.sum(metrics4), np.sum(metrics5), np.sum(metricsall1), np.sum(metricsall2), np.sum(metricsall3)  # loss, ls, ls1, bleu, bleu1
+ #loss, ls, ls1, bleu, bleu1
 
 class TagLossBiafRL(nn.Module): # parsers
     def __init__(self, device, word_alphabet, vocab_size, port):
@@ -658,20 +816,22 @@ class TagLossBiafRL(nn.Module): # parsers
         batch = sel.shape[0]
         rewards_z3 = []
         metrics3 = []
+        cnt_misc3 = []
         metricsall3 = []
         for i in range(batch):  # batch
             reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
             metric3 = self.get_same_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
-
             stc_diff = self.get_diff_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], list_stc_length_out[i], ori_words[i],ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
 
 
             rewards_z3.append(reward)
             metrics3.append(metric3*1.0/(list_stc_length_out[i] * 1.0))
+            cnt_misc3.append(metric3*1.0)
             allsame = 1 if stc_diff==0 else 0
             metricsall3.append(allsame)
         rewards_z3 = np.asarray(rewards_z3)
         metrics3 = np.array(metrics3)
+        cnt_misc3 = np.array(cnt_misc3)
         metricsall3 = np.asarray(metricsall3)
 
         ####3#####add meaning_preservation as reward
@@ -741,18 +901,26 @@ class TagLossBiafRL(nn.Module): # parsers
         # return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(rewards_z3), np.average(
         #     meaning_preservation), np.average(ppl), np.sum(metrics1), np.sum(metrics2), np.sum(metrics3), np.sum(metrics4), np.sum(metrics5), np.sum(metricsall1), np.sum(metricsall2), np.sum(metricsall3)  # loss, ls, ls1, bleu, bleu1
 
-        return loss, \
-               np.average(rewards_z1) * global_variables.Z1_REWARD_WEIGHT, \
-               np.average(rewards_z2) * global_variables.Z2_REWARD_WEIGHT, \
-               np.average(rewards_z3) * global_variables.Z3_REWARD_WEIGHT, \
-               np.average(meaning_preservation) * global_variables.MP_REWARD_WEIGHT, \
-               np.average(ppl) * global_variables.PPL_REWARD_WEIGHT, \
-               np.average(unk_rewards) * global_variables.UNK_REWARD_WEIGHT, \
-               np.average(metrics1), \
-               np.average(metrics2), \
-               np.average(metrics3), \
-               np.average(metrics4), \
-               np.average(metrics5), \
-               np.average(metricsall1), \
-               np.average(metricsall2), \
-               np.average(metricsall3) #loss, ls, ls1, bleu, bleu1
+        # loss = ls1
+        res = {}
+        res['loss'] = loss
+        res['avg_z1'] = np.average(rewards_z1)
+        res['avg_z2'] = np.average(rewards_z2)
+        res['avg_z3'] = np.average(rewards_z3)
+        res['avg_mp'] = np.average(meaning_preservation)
+        res['avg_ppl'] = np.average(ppl)
+        res['abg_unk'] = np.average(unk_rewards)
+        res['sum_me1'] = np.sum(metrics1)
+        res['sum_me2'] = np.sum(metrics2)
+        res['sum_me3'] = np.sum(metrics3)
+        res['sum_me4'] = np.sum(metrics4)
+        res['sum_me5'] = np.sum(metrics5)
+        res['cnt_me1'] = np.sum(rewards_z1)
+        res['cnt_me2'] = np.sum(rewards_z2)
+        res['cnt_me3'] = np.sum(cnt_misc3)
+
+        res['sum_me1all'] = np.sum(metricsall1)
+        res['sum_me2all'] = np.sum(metricsall2)
+        res['sum_me3all'] = np.sum(metricsall3)
+
+        return res

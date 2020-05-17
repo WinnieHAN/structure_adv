@@ -68,8 +68,8 @@ def main():
     parser.add_argument('--rl_finetune_seq2seq_save_path', default='tagging_models/tagging/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_save_path')
     parser.add_argument('--rl_finetune_network_save_path', default='tagging_models/tagging/rl_finetune/network_save_model', type=str, help='rl_finetune_network_save_path')
 
-    parser.add_argument('--rl_finetune_seq2seq_load_path', default='tagging_models/tagging/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
-    parser.add_argument('--rl_finetune_network_load_path', default='tagging_models/tagging/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
+    parser.add_argument('--rl_finetune_seq2seq_load_path', default='/media/zhanglw/2EF0EF5BF0EF27B3/code/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
+    parser.add_argument('--rl_finetune_network_load_path', default='/media/zhanglw/2EF0EF5BF0EF27B3/code/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
 
     parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
 
@@ -507,7 +507,8 @@ def main():
         if True:
             seq2seq.eval()
             network.eval()
-            ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = rewards6 = rewardsall1 = rewardsall2 = rewardsall3 = cnt =0
+            ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = \
+                zlw_rewards1 = zlw_rewards2 = zlw_rewards3 = rewardsall1 = rewardsall2 = rewardsall3 = 0
             pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
             pred_filename_test = 'tagging_dumped/' + '_' + SCORE_PREFIX +'pred_test%d' % (epoch_i)
             src_filename_test = 'tagging_dumped/' + '_' + SCORE_PREFIX +'src_test%d' % (epoch_i)
@@ -529,12 +530,12 @@ def main():
             nll = 0
             token_num = 0
             kk = 0
-            batch_size_for_eval = 128
+            batch_size_for_eval = 3
             for batch in conllx_data.iterate_batch_tensor(data_test, batch_size_for_eval):  # batch_size
                 kk += 1
                 # print('-------'+str(kk)+'-------')
-                # if kk > 1:
-                #     break
+                if kk > 2:
+                    break
                 # if kk==7:
                 #     print('error here')
                 word, char, labels, _, _, masks, lengths = batch
@@ -592,29 +593,26 @@ def main():
                     #                                                           ori_words_length=lengths
                     #                                                           )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
 
-                    ls_rl_bh, _ , _ , _ , _ , _ , reward6 , \
-                    reward1, reward2, reward3, reward4, \
-                    reward5, rewardall1, rewardall2, \
-                    rewardall3 = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=tags_pred,golden_out=labels,
-                                                              mask_id=END_token,stc_length_out=lengths_sel,
-                                                              sudo_golden_out=sudo_tags_pred,
-                                                              sudo_golden_out_1=sudo_tags_pred_1,
-                                                              ori_words=word,
-                                                              ori_words_length=lengths)
-                    # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                    res = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=tags_pred,golden_out=labels,
+                                                        mask_id=END_token,stc_length_out=lengths_sel,
+                                                        sudo_golden_out=sudo_tags_pred,
+                                                        sudo_golden_out_1=sudo_tags_pred_1,
+                                                        ori_words=word,
+                                                        ori_words_length=lengths)
 
-                cnt += word.size(0)
-                ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
+                ls_rl_bh = res['loss'].item()
                 ls_rl_ep += ls_rl_bh * word.size(0)
-                rewards1 += reward1 * word.size(0)
-                rewards2 += reward2 * word.size(0)
-                rewards3 += reward3 * word.size(0)
-                rewards4 += reward4 * word.size(0)
-                rewards5 += reward5 * word.size(0)
-                rewards6 += reward6 * word.size(0)
-                rewardsall1 += rewardall1 * word.size(0)
-                rewardsall2 += rewardall2 * word.size(0)
-                rewardsall3 += rewardall3 * word.size(0)
+                rewards1 += res['sum_me1']
+                rewards2 += res['sum_me2']
+                rewards3 += res['sum_me3']
+                rewards4 += res['sum_me4']
+                rewards5 += res['sum_me5']
+                rewardsall1 += res['sum_me1all']
+                rewardsall2 += res['sum_me2all']
+                rewardsall3 += res['sum_me3all']
+                zlw_rewards1 += res['cnt_me1']
+                zlw_rewards2 += res['cnt_me2']
+                zlw_rewards3 += res['cnt_me3']
 
                 sel = sel.detach().cpu().numpy()
                 lengths_sel = lengths_sel.detach().cpu().numpy()
@@ -629,24 +627,27 @@ def main():
                     nll += sum(pb[i, 1:lengths_sel[i]])
                 token_num += sum(lengths_sel)#-len(lengths_sel)
 
-            rewards1 = rewards1 * 1.0 / cnt
-            rewards2 = rewards2 * 1.0 / cnt
-            rewards3 = rewards3 * 1.0 / cnt
-            rewards4 = rewards4 * 1.0 / cnt
-            rewards5 = rewards5 * 1.0 / cnt
-            rewardsall1 = rewardsall1 * 1.0 / cnt
-            rewardsall2 = rewardsall2 * 1.0 / cnt
-            rewardsall3 = rewardsall3 * 1.0 / cnt
-
-            nll /= token_num
-
+            rewards1 = rewards1 * 1.0 / sum(data_test[1])
+            rewards2 = rewards2 * 1.0 / sum(data_test[1])
+            rewards3 = rewards3 * 1.0 / sum(data_test[1])
+            rewards4 = rewards4 * 1.0 / sum(data_test[1])
+            rewards5 = rewards5 * 1.0 / sum(data_test[1])
+            rewardsall1 = rewardsall1 * 1.0 / sum(data_test[1])
+            rewardsall2 = rewardsall2 * 1.0 / sum(data_test[1])
+            rewardsall3 = rewardsall3 * 1.0 / sum(data_test[1])
+            zlw_rewards1 = zlw_rewards1 * 1.0 / token_num
+            zlw_rewards2 = zlw_rewards2 * 1.0 / token_num
+            zlw_rewards3 = 1 -zlw_rewards3 * 1.0 / token_num
             print('test loss: ', ls_rl_ep)
-            print('test metrics parser b: ', rewards1)
-            print('test metrics parser c: ', rewards2)
-            print('test metrics parser b^c: ', rewards3)
-            print('test metrics meaning: ', rewards4)
-            print('test metrics fluency: ', rewards5)
-            print('test metrics UNK rate: ', rewards6)
+            print('test reward parser b: ', rewards1)
+            print('test zlw reward parser b: ', zlw_rewards1)
+            print('test reward parser c: ', rewards2)
+            print('test zlw reward parser c: ', zlw_rewards2)
+            print('test reward parser b^c: ', rewards3)
+            print('test zlw reward parser b^c: ', zlw_rewards3)
+            print('test reward meaning: ', rewards4)
+            print('test reward fluency: ', rewards5)
+
             print('test metrics whole parser b: ', rewardsall1)
             print('test metrics whole parser c: ', rewardsall2)
             print('test metrics whole parser b^c: ', rewardsall3)
