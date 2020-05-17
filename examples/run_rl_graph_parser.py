@@ -541,7 +541,7 @@ def main():
         ####eval######
         seq2seq.eval()
         network.eval()
-        with torch.no_grad():
+        if True:
             ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = \
                 zlw_rewards1 = zlw_rewards2 = zlw_rewards3 = rewardsall1 = rewardsall2 = rewardsall3 = 0
             if args.treebank == 'ptb':
@@ -577,19 +577,20 @@ def main():
                 #     break
                 word, char, pos, heads, types, masks, lengths = batch
                 # print(lengths)
-                inp = word  # , _ = seq2seq.add_noise(word, lengths)
-                sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
-                end_position = torch.eq(sel, END_token).nonzero()
-                masks_sel = torch.ones_like(sel, dtype=torch.float)
-                lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
-                if not len(end_position) == 0:
-                    ij_back = -1
-                    for ij in end_position:
-                        if not (ij[0] == ij_back):
-                            lengths_sel[ij[0]] = ij[1]
-                            masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
-                            ij_back = ij[0]
                 with torch.no_grad():
+                    inp = word  # , _ = seq2seq.add_noise(word, lengths)
+                    sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+                    end_position = torch.eq(sel, END_token).nonzero()
+                    masks_sel = torch.ones_like(sel, dtype=torch.float)
+                    lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                    if not len(end_position) == 0:
+                        ij_back = -1
+                        for ij in end_position:
+                            if not (ij[0] == ij_back):
+                                lengths_sel[ij[0]] = ij[1]
+                                masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                                ij_back = ij[0]
+
                     heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel,
                                                     length=lengths_sel,
                                                     leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
@@ -630,7 +631,7 @@ def main():
                                                        sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1,
                                                        ori_words=word, ori_words_length=lengths)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
 
-                ls_rl_bh = ls_rl_bh.cpu().detach().numpy()
+                ls_rl_bh = res['loss'].cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh
                 rewards1 += res['sum_me1']
                 rewards2 += res['sum_me2']
