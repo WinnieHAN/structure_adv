@@ -102,7 +102,9 @@ def main():
     args_parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
     args_parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
     args_parser.add_argument('--unk_weight', type=float, default=100, help='reward weight of unk rate')
-    args_parser.add_argument('--prefix', type=str, action='append', required=True)
+    args_parser.add_argument('--prefix', type=str, required=True)
+    args_parser.add_argument('--models', type=str, action='append', required=True)
+
     args = args_parser.parse_args()
 
     logger = get_logger("GraphParser")
@@ -384,14 +386,14 @@ def main():
 
     loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words, port=port).to(device)
 
-    for prefix in args.prefix:
-        print('=======' + prefix + '=========')
+    for load_model_name in args.models:
+        print('=======' + load_model_name + '=========')
         END_token = word_alphabet.instance2index['_PAD']  # word_alphabet.get_instance('_PAD)==1  '_END'==3
         test_num = 0
 
-        seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + prefix + '.pt'))  # TODO: 7.13
+        seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + load_model_name + '.pt'))  # TODO: 7.13
         seq2seq.to(device)
-        network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + prefix + '.pt'))
+        network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + load_model_name + '.pt'))
         network.to(device)
 
         ####eval######
@@ -402,8 +404,8 @@ def main():
 
         ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = \
             zlw_rewards1 = zlw_rewards2 = zlw_rewards3 = rewardsall1 = rewardsall2 = rewardsall3 = 0
-        pred_filename_test = 'dumped/%spred_test' % prefix
-        src_filename_test = 'dumped/%ssrc_test' % prefix
+        pred_filename_test = 'dumped/%spred_test' % load_model_name
+        src_filename_test = 'dumped/%ssrc_test' % load_model_name
 
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
         pred_writer_test.start(pred_filename_test)
