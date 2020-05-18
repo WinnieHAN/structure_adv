@@ -548,7 +548,6 @@ def main():
         pred_parse_writer_testA.close()
         pred_parse_writer_testB.close()
         pred_parse_writer_testC.close()
-        break
 
 if __name__ == '__main__':
     main()
