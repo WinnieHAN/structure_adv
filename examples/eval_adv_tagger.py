@@ -68,8 +68,8 @@ def main():
     parser.add_argument('--rl_finetune_seq2seq_save_path', default='tagging_models/tagging/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_save_path')
     parser.add_argument('--rl_finetune_network_save_path', default='tagging_models/tagging/rl_finetune/network_save_model', type=str, help='rl_finetune_network_save_path')
 
-    parser.add_argument('--rl_finetune_seq2seq_load_path', default='tagging_models/tagging/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
-    parser.add_argument('--rl_finetune_network_load_path', default='tagging_models/tagging/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
+    parser.add_argument('--rl_finetune_seq2seq_load_path', default='/media/zhanglw/2EF0EF5BF0EF27B3/code/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
+    parser.add_argument('--rl_finetune_network_load_path', default='/media/zhanglw/2EF0EF5BF0EF27B3/code/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
 
     parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
 
@@ -81,7 +81,7 @@ def main():
     parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
     parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
     parser.add_argument('--unk_weight', type=float, default=1000, help='reward weight of unk rate')
-    parser.add_argument('--prefix', type=str, default='/home/zhanglw/code/structure_adv/b64_lr3_mp3e1_pple3_')
+    parser.add_argument('--prefix', type=str, default='/home/zhanglw/code/structure_adv/b64_lr5e4_mpe1_noppl_')
 
     parser.add_argument('--parserb', type=str, required=True)
     parser.add_argument('--parserc', type=str, required=True)
@@ -227,7 +227,7 @@ def main():
 
     END_token = word_alphabet.instance2index['_PAD']
 
-    for epoch_i in range(EPOCHS):
+    for epoch_i in range(1, EPOCHS):
         print('======='+str(epoch_i)+'=========')
         seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + SCORE_PREFIX + str(epoch_i) + '.pt'))
         seq2seq.to(device)
@@ -347,14 +347,14 @@ def main():
             sel = sel.detach().cpu().numpy()
             lengths_sel = lengths_sel.detach().cpu().numpy()
             # print(sel)
-            pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
-            src_writer_test.write_stc(word, lengths, symbolic_root=True)
+            pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=False)
+            src_writer_test.write_stc(word, lengths, symbolic_root=False)
             pred_parse_writer_testA.write(sel, sel, tags_pred, tags_pred, lengths_sel,
-                                          symbolic_root=True)  # word, pos, head, type, lengths,
+                                          symbolic_root=False)  # word, pos, head, type, lengths,
             pred_parse_writer_testB.write(sel, sel, sudo_tags_pred, sudo_tags_pred, lengths_sel,
-                                          symbolic_root=True)  # word, pos, head, type, lengths,
+                                          symbolic_root=False)  # word, pos, head, type, lengths,
             pred_parse_writer_testC.write(sel, sel, sudo_tags_pred_1, sudo_tags_pred_1, lengths_sel,
-                                          symbolic_root=True)  # word, pos, head, type, lengths,
+                                          symbolic_root=False)  # word, pos, head, type, lengths,
 
             for i in range(len(lengths_sel)):
                 nll += sum(pb[i, 1:lengths_sel[i]])

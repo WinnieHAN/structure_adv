@@ -423,10 +423,14 @@ def main():
         # elif args.treebank == 'ctb':
         #     batch_size = 1
         # num_batches = 0 #(39831/2)/kkkk
+        import time
+        start_time = time.time()
         print('num_batches: ', str(num_batches))
         for kkk in range(1, num_batches + 1): #num_batches
             print('-train--'+str(kkk)+'---')
             # # train_rl
+            if kkk % 5 == 1:
+                print(time.time() - start_time)
             # if kkk==6:
             #     print('two long time')
             #     break
@@ -539,8 +543,8 @@ def main():
                 # if kk==7:
                 #     print('error here')
                 word, char, labels, _, _, masks, lengths = batch
-                if not args.direct_eval:
-                    with torch.no_grad():
+                with torch.no_grad():
+                    if not args.direct_eval:
                         inp = word  #, _ = seq2seq.add_noise(word, lengths)
                         sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
                         end_position = torch.eq(sel, END_token).nonzero()
@@ -553,16 +557,16 @@ def main():
                                     lengths_sel[ij[0]] = ij[1]
                                     masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of pad token in the end: 1
                                     ij_back = ij[0]
-                        char1 = word_to_chars_tensor(char.shape, sel, lengths_sel, word_alphabet, char_alphabet)
-                else:
-                    sel = word
-                    pb = torch.ones_like(sel, dtype=torch.float).fill_(0)
-                    lengths_sel = lengths
-                    masks_sel = masks
-                    char1 = char
-                with torch.no_grad():
-                    tags_pred, corr = network.decode(sel, char1, target=labels, mask=masks_sel,
-                                                     leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                        # char1 = word_to_chars_tensor(char.shape, sel, lengths_sel, word_alphabet, char_alphabet)
+                    else:
+                        sel = word
+                        pb = torch.ones_like(sel, dtype=torch.float).fill_(0)
+                        lengths_sel = lengths
+                        masks_sel = masks
+                        char1 = char
+
+                        tags_pred, corr = network.decode(sel, char1, target=labels, mask=masks_sel,
+                                                         leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                     sel_num = sel.cpu().numpy()
                     sentence_max_length = len(sel_num[0])
                     str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in sel_num[one_stc_id][:lengths_sel[one_stc_id]]] for
@@ -617,11 +621,11 @@ def main():
                 sel = sel.detach().cpu().numpy()
                 lengths_sel = lengths_sel.detach().cpu().numpy()
                 # print(sel)
-                pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
-                src_writer_test.write_stc(word, lengths, symbolic_root=True)
-                pred_parse_writer_testA.write(sel, sel, tags_pred, tags_pred, lengths_sel, symbolic_root=True)  # word, pos, head, type, lengths,
-                pred_parse_writer_testB.write(sel, sel, sudo_tags_pred, sudo_tags_pred, lengths_sel, symbolic_root=True)  # word, pos, head, type, lengths,
-                pred_parse_writer_testC.write(sel, sel, sudo_tags_pred_1, sudo_tags_pred_1, lengths_sel, symbolic_root=True)  # word, pos, head, type, lengths,
+                pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=False)
+                src_writer_test.write_stc(word, lengths, symbolic_root=False)
+                pred_parse_writer_testA.write(sel, sel, tags_pred, tags_pred, lengths_sel, symbolic_root=False)  # word, pos, head, type, lengths,
+                pred_parse_writer_testB.write(sel, sel, sudo_tags_pred, sudo_tags_pred, lengths_sel, symbolic_root=False)  # word, pos, head, type, lengths,
+                pred_parse_writer_testC.write(sel, sel, sudo_tags_pred_1, sudo_tags_pred_1, lengths_sel, symbolic_root=False)  # word, pos, head, type, lengths,
 
                 for i in range(len(lengths_sel)):
                     nll += sum(pb[i, 1:lengths_sel[i]])
