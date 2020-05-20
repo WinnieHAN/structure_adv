@@ -203,11 +203,9 @@ def main():
         bc_same = 0
         cnt = 0
 
-        nll = 0
-        token_num = 0
         kk = 0
         batch_size_for_eval = 32
-        for batch in conllx_data.iterate_batch_tensor(data_test, batch_size_for_eval):  # batch_size
+        for batch in conllx_data.iterate_batch_tensor(data_train, batch_size_for_eval):  # batch_size
             kk += 1
             print('-------'+str(kk)+'-------')
             if kk > 2:
@@ -285,6 +283,7 @@ def main():
         pred_filename_test = 'tagging_dumped/' + prefix + 'gen.conllu'
         pred_writer_test.start(pred_filename_test)
         for raw, gen, pred, golden, length in generation_res:
+            golden = [pos_alphabet.instances[i] for i in golden]
             pred_writer_test.write(np.array([gen]), np.array([golden]), np.array([[1]*length]), None, np.array([length]), symbolic_root=False)
         pred_writer_test.close()
 

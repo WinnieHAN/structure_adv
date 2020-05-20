@@ -45,9 +45,11 @@ def main():
     parser.add_argument('--unk_replace', type=float, default=0., help='The rate to replace a singleton word with UNK')
     parser.add_argument('--embedding', choices=['glove', 'senna', 'sskip', 'polyglot'], help='Embedding for words', required=True)
     parser.add_argument('--embedding_dict', help='path for embedding dict')
-    parser.add_argument('--train')  # "data/POS-penn/wsj/split1/wsj1.train.original"
+    parser.add_argument('--train', action='append')  # "data/POS-penn/wsj/split1/wsj1.train.original"
     parser.add_argument('--dev')  # "data/POS-penn/wsj/split1/wsj1.dev.original"
     parser.add_argument('--test')  # "data/POS-penn/wsj/split1/wsj1.test.original"
+    parser.add_argument('--load_model_path', default='tagging_models/tagging/rl_finetune/network_save_model')
+    parser.add_argument('--model_name', required=True)
 
     args = parser.parse_args()
 
@@ -77,6 +79,8 @@ def main():
 
     embedd_dict, embedd_dim = utils.load_embedding_dict(embedding, embedding_path)
 
+    model_name = args.model_name
+
     logger.info("Creating Alphabets")
     word_alphabet, char_alphabet, pos_alphabet, \
     type_alphabet = conllx_data.create_alphabets("data/alphabets/pos_crf/", train_path,data_paths=[dev_path, test_path],
@@ -89,7 +93,7 @@ def main():
     logger.info("Reading Data")
     device = torch.device('cuda') if args.cuda else torch.device('cpu')
 
-    data_train = conllx_data.read_data_to_tensor(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet, device=device)
+    data_train = conllx_data.read_data_list_to_tensor(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet, device=device)
     # data_train = conllx_data.read_data(train_path, word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
     # num_data = sum([len(bucket) for bucket in data_train])
     num_data = sum(data_train[1])
@@ -131,6 +135,9 @@ def main():
                                         tag_space=tag_space, embedd_word=word_table, bigram=bigram, p_in=p_in, p_out=p_out, p_rnn=p_rnn, initializer=initializer)
 
     network = network.to(device)
+
+    network.load_state_dict(torch.load(args.load_model_path))
+    network.to(device)
 
     lr = learning_rate
     optim = SGD(network.parameters(), lr=lr, momentum=momentum, weight_decay=gamma)
@@ -211,6 +218,7 @@ def main():
                     test_total += num_tokens
 
                 test_correct = test_corr
+                torch.save(network.state_dict(), model_name)
             print("best dev  corr: %d, total: %d, acc: %.2f%% (epoch: %d)" % (dev_correct, dev_total, dev_correct * 100 / dev_total, best_epoch))
             print("best test corr: %d, total: %d, acc: %.2f%% (epoch: %d)" % (test_correct, test_total, test_correct * 100 / test_total, best_epoch))
 
