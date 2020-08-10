@@ -886,3 +886,7 @@ class StackPtrNet(nn.Module):
             stack_types[b, :2 * sent_len - 1] = stids
 
         return heads, types, children, stack_types
+
+    def return_word_embedd(self):
+        return self.word_embedd
+
