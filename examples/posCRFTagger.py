@@ -218,7 +218,7 @@ def main():
                     test_total += num_tokens
 
                 test_correct = test_corr
-                torch.save(network.state_dict(), model_name)
+                torch.save(network.state_dict(), model_name + '_' + str(epoch) + '.pt')
             print("best dev  corr: %d, total: %d, acc: %.2f%% (epoch: %d)" % (dev_correct, dev_total, dev_correct * 100 / dev_total, best_epoch))
             print("best test corr: %d, total: %d, acc: %.2f%% (epoch: %d)" % (test_correct, test_total, test_correct * 100 / test_total, best_epoch))
 
