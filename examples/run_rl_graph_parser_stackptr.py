@@ -329,16 +329,16 @@ def main():
     seq2seq.emb.weight.requires_grad = False
     print(seq2seq)
 
-    # if args.treebank == 'ptb':
-    #     seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
-    #     seq2seq.to(device)
-    #     network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
-    #     network.to(device)
-    # elif args.treebank == 'ctb':
-    #     seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(7) + '.pt'))
-    #     seq2seq.to(device)
-    #     network.load_state_dict(torch.load(args.network_load_path + str(7) + '.pt'))
-    #     network.to(device)
+    if args.treebank == 'ptb':
+        seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
+        seq2seq.to(device)
+        # network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
+        # network.to(device)
+    elif args.treebank == 'ctb':
+        seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(7) + '.pt'))
+        seq2seq.to(device)
+        # network.load_state_dict(torch.load(args.network_load_path + str(7) + '.pt'))
+        # network.to(device)
 
     # import third_party_parser
     if parser_select[0] == 'stackPtr':
@@ -605,7 +605,7 @@ def main():
                                 masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
                                 ij_back = ij[0]
 
-                    heads_pred, types_pred = network.decode(sel, input_char=None, input_pos=None, mask=masks_sel,
+                    heads_pred, types_pred, _, _ = network.decode(sel, input_char=None, input_pos=None, mask=masks_sel,
                                                     length=lengths_sel,
                                                     leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                     if 'stackPtr' == parser_select[0]:
