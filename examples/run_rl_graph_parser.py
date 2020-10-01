@@ -94,7 +94,6 @@ def main():
     args_parser.add_argument('--rl_finetune_seq2seq_load_path', default='models/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
     args_parser.add_argument('--rl_finetune_network_load_path', default='models/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
 
-    args_parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
     args_parser.add_argument('--port', type=int, default=10048, help='localhost port for berscore server')
     args_parser.add_argument('--z1_weight', type=float, default=1.0, help='reward weight of z1')
     args_parser.add_argument('--z2_weight', type=float, default=1.0, help='reward weight of z2')
@@ -302,10 +301,8 @@ def main():
 
     num_batches = num_data / batch_size + 1
 
-    if args.treebank == 'ptb':
-        network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))
-    elif args.treebank == 'ctb':
-        network.load_state_dict(torch.load('ctb_models/parsing/biaffine/network.pt'))
+    network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))
+
     network.to(device)
 
     shared_word_embedd = network.return_word_embedd()
@@ -315,16 +312,10 @@ def main():
     seq2seq.emb.weight.requires_grad = False
     print(seq2seq)
 
-    if args.treebank == 'ptb':
-        seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
-        seq2seq.to(device)
-        network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
-        network.to(device)
-    elif args.treebank == 'ctb':
-        seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(7) + '.pt'))
-        seq2seq.to(device)
-        network.load_state_dict(torch.load(args.network_load_path + str(7) + '.pt'))
-        network.to(device)
+    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
+    seq2seq.to(device)
+    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
+    network.to(device)
 
     # import third_party_parser
     if parser_select[0] == 'stackPtr':
@@ -333,16 +324,9 @@ def main():
         bist_parser = None
     elif parser_select[0] == 'bist':
         sudo_golden_parser = None
-        if args.treebank == 'ptb':
-            params = 'bist_parser/pretrained/model1/params.pickle'
-            external_embedding = 'bist_parser/sskip.100.vectors'
-            model = 'bist_parser/pretrained/model1/barchybrid.model30'
-        elif args.treebank == 'ctb':
-            params = 'bist_parser/ctb_output/params.pickle'
-            external_embedding = 'bist_parser/sskip.chn.50'
-            model = 'bist_parser/ctb_output/barchybrid.model30'
-        else:
-            raise ValueError('treebank should be ptb or ctb')
+        params = 'bist_parser/pretrained/model1/params.pickle'
+        external_embedding = 'bist_parser/sskip.100.vectors'
+        model = 'bist_parser/pretrained/model1/barchybrid.model30'
 
         with open(params, 'r') as paramsfp:
             words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
@@ -369,17 +353,9 @@ def main():
         bist_parser_1 = None
     elif parser_select[1] == 'bist':
         sudo_golden_parser_1 = None
-
-        if args.treebank == 'ptb':
-            params = 'bist_parser/pretrained/model1/params.pickle'
-            external_embedding = 'bist_parser/sskip.100.vectors'
-            model = 'bist_parser/pretrained/model1/barchybrid.model30'
-        elif args.treebank == 'ctb':
-            params = 'bist_parser/ctb_output/params.pickle'
-            external_embedding = 'bist_parser/sskip.chn.50'
-            model = 'bist_parser/ctb_output/barchybrid.model30'
-        else:
-            raise ValueError('treebank should be ptb or ctb')
+        params = 'bist_parser/pretrained/model1/params.pickle'
+        external_embedding = 'bist_parser/sskip.100.vectors'
+        model = 'bist_parser/pretrained/model1/barchybrid.model30'
 
         with open(params, 'r') as paramsfp:
             words, w2i, pos, rels, stored_opt = pickle.load(paramsfp)
@@ -406,9 +382,9 @@ def main():
     optim_bia_rl = torch.optim.Adam(parameters_need_update, lr=learning_rate)  # 1e-5 0.00005
     loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words, port=port).to(device)
 
-    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))  # TODO: 7.13
+    # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))
     seq2seq.to(device)
-    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))  # TODO: 7.13
+    # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))
     network.to(device)
 
     for epoch_i in range(0, num_epochs):
@@ -419,12 +395,6 @@ def main():
         seq2seq.emb.weight.requires_grad = False
         END_token = word_alphabet.instance2index['_PAD']  # word_alphabet.get_instance('_PAD)==1  '_END'==3
         train_num = test_num = 0
-        # num_batches =
-        # if args.treebank == 'ptb':
-        #     batch_size = 10
-        # elif args.treebank == 'ctb':
-        #     batch_size = 10
-        # num_batches = 0
 
         for kkk in range(1, num_batches + 1):  # range(1, 1):
             # print('---'+str(kkk)+'---')
@@ -445,14 +415,13 @@ def main():
                     continue
 
                 masks_sel = torch.ones_like(sel1, dtype=torch.float)
-                lengths_sel = torch.ones_like(lengths).fill_(
-                    sel1.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                lengths_sel = torch.ones_like(lengths).fill_(sel1.shape[1])
                 if not len(end_position) == 0:
                     ij_back = -1
                     for ij in end_position:
                         if not (ij[0] == ij_back):
                             lengths_sel[ij[0]] = ij[1]
-                            masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                            masks_sel[ij[0], ij[1]:] = 0
                             ij_back = ij[0]
 
                 with torch.no_grad():
@@ -544,12 +513,9 @@ def main():
         if True:
             ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = \
                 zlw_rewards1 = zlw_rewards2 = zlw_rewards3 = rewardsall1 = rewardsall2 = rewardsall3 = 0
-            if args.treebank == 'ptb':
-                pred_filename_test = 'dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
-                src_filename_test = 'dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
-            elif args.treebank == 'ctb':
-                src_filename_test = 'ctb_dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
-                pred_filename_test = 'ctb_dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
+
+            pred_filename_test = 'dumped/%spred_test%d' % (SCORE_PREFIX, epoch_i)
+            src_filename_test = 'dumped/%ssrc_test%d' % (SCORE_PREFIX, epoch_i)
             pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
             pred_writer_test.start(pred_filename_test)
 
@@ -582,13 +548,13 @@ def main():
                     sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
                     end_position = torch.eq(sel, END_token).nonzero()
                     masks_sel = torch.ones_like(sel, dtype=torch.float)
-                    lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                    lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])
                     if not len(end_position) == 0:
                         ij_back = -1
                         for ij in end_position:
                             if not (ij[0] == ij_back):
                                 lengths_sel[ij[0]] = ij[1]
-                                masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                                masks_sel[ij[0], ij[1]:] = 0
                                 ij_back = ij[0]
 
                     heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel,
@@ -629,7 +595,7 @@ def main():
                     res = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=heads_pred, golden_out=heads,
                                                        mask_id=END_token, stc_length_out=lengths_sel,
                                                        sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1,
-                                                       ori_words=word, ori_words_length=lengths)  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
+                                                       ori_words=word, ori_words_length=lengths)
 
                 ls_rl_bh = res['loss'].cpu().detach().numpy()
                 ls_rl_ep += ls_rl_bh

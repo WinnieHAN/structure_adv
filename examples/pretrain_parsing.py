@@ -102,8 +102,6 @@ def main():
     args_parser.add_argument('--rl_finetune_network_load_path', default='models/rl_finetune/network_save_model',
                              type=str, help='rl_finetune_network_load_path')
 
-    args_parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
-
     args = args_parser.parse_args()
 
     logger = get_logger("GraphParser")
@@ -347,10 +345,7 @@ def main():
     max_decay = 9
     double_schedule_decay = 5
     num_epochs = 0  # debug hanwj
-    if args.treebank == 'ptb':
-        network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))  # TODO: 10.7
-    elif args.treebank == 'ctb':
-        network.load_state_dict(torch.load('ctb_models/parsing/biaffine/network.pt'))  # TODO: 10.7
+    network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))
     network.to(device)
     for epoch in range(1, num_epochs + 1):
         print(
@@ -628,16 +623,11 @@ def main():
     loss_seq2seq = torch.nn.CrossEntropyLoss(reduction='none').to(device)
     parameters_need_update = filter(lambda p: p.requires_grad, seq2seq.parameters())
     optim_seq2seq = torch.optim.Adam(parameters_need_update, lr=0.0002)
-    if args.treebank == 'ptb':
-        seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
-        seq2seq.to(device)
-        network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
-        network.to(device)
-    elif args.treebank == 'ctb':
-        seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(7) + '.pt'))
-        seq2seq.to(device)
-        network.load_state_dict(torch.load(args.network_load_path + str(7) + '.pt'))
-        network.to(device)
+    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
+    seq2seq.to(device)
+    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
+    network.to(device)
+
 
     for i in range(EPOCHS):
         ls_seq2seq_ep = 0

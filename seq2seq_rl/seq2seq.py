@@ -117,11 +117,10 @@ class Seq2seq_Model(nn.Module):
         Randomly blank input words.
         """
         word_blank = 0
-        blank_index = 0  # should be defined TODO:
-        pad_index = 0  # should be defined TODO:
+        blank_index = 0
+        pad_index = 0
         # define words to blank
         keep = np.random.rand(x.size(0), x.size(1)) >= word_blank
-        # do not blank the start sentence symbol TODO:
         sentences = []
         for i in range(l.size(0)):
             words = x[i, :l[i]].tolist()
@@ -135,7 +134,7 @@ class Seq2seq_Model(nn.Module):
 
         return x2, l
 
-    # new method of adding noising  # TODO: hanwj
+    # new method of adding noising
     def word_shuffle(self, x, l, lang_id):
         """
         Randomly shuffle input words.

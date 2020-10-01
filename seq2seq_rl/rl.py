@@ -404,7 +404,7 @@ class LossBiafRL(nn.Module):
                    rewards_z1 * global_variables.Z1_REWARD_WEIGHT +
                    rewards_z2 * global_variables.Z2_REWARD_WEIGHT +
                    rewards_z3 * global_variables.Z3_REWARD_WEIGHT +
-                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
+                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001
         # rewards = bleus_w * 10  # 8.26
 
         ls3 = 0
@@ -530,7 +530,7 @@ class LossBiafRL(nn.Module):
                    rewards_z1 * global_variables.Z1_REWARD_WEIGHT +
                    rewards_z2 * global_variables.Z2_REWARD_WEIGHT +
                    rewards_z3 * global_variables.Z3_REWARD_WEIGHT +
-                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
+                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001
         # rewards = bleus_w * 10  # 8.26
 
         ls3 = 0
@@ -742,7 +742,7 @@ class TagLossBiafRL(nn.Module): # parsers
                    rewards_z1 * global_variables.Z1_REWARD_WEIGHT +
                    rewards_z2 * global_variables.Z2_REWARD_WEIGHT +
                    rewards_z3 * global_variables.Z3_REWARD_WEIGHT +
-                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
+                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001
         # rewards = bleus_w * 10  # 8.26
 
         ls3 = 0
@@ -871,7 +871,7 @@ class TagLossBiafRL(nn.Module): # parsers
                    rewards_z1 * global_variables.Z1_REWARD_WEIGHT +
                    rewards_z2 * global_variables.Z2_REWARD_WEIGHT +
                    rewards_z3 * global_variables.Z3_REWARD_WEIGHT +
-                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001      #TODO  0.1# + bleus_w*5
+                   unk_rewards * global_variables.UNK_REWARD_WEIGHT) * 0.001
         # rewards = bleus_w * 10  # 8.26
 
         ls3 = 0

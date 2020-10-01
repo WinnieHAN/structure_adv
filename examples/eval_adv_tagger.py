@@ -71,8 +71,6 @@ def main():
     parser.add_argument('--rl_finetune_seq2seq_load_path', default='/media/zhanglw/2EF0EF5BF0EF27B3/code/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
     parser.add_argument('--rl_finetune_network_load_path', default='/media/zhanglw/2EF0EF5BF0EF27B3/code/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
 
-    parser.add_argument('--treebank', type=str, default='ctb', help='tree bank', choices=['ctb', 'ptb'])  # ctb
-
     parser.add_argument('--direct_eval', action='store_true', help='direct eval without generation process')
     parser.add_argument('--port', type=int, default=10048, help='localhost port for berscore server')
     parser.add_argument('--z1_weight', type=float, default=1.0, help='reward weight of z1')
@@ -81,7 +79,7 @@ def main():
     parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
     parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
     parser.add_argument('--unk_weight', type=float, default=1000, help='reward weight of unk rate')
-    parser.add_argument('--prefix', type=str, default='/home/zhanglw/code/structure_adv/b64_lr5e4_mpe1_noppl_')
+    parser.add_argument('--prefix', type=str, default='./test_')
 
     parser.add_argument('--parserb', type=str, required=True)
     parser.add_argument('--parserc', type=str, required=True)
@@ -196,9 +194,9 @@ def main():
 
     print('Train seq2seq model using rl with reward of biaffine.')
 
-    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))  # TODO: 10.7
+    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
     seq2seq.to(device)
-    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))  # TODO: 10.7
+    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
     network.to(device)
 
     sudo_golden_tagger = SennaTagger(parser_b)
@@ -276,13 +274,13 @@ def main():
                     end_position = torch.eq(sel, END_token).nonzero()
                     masks_sel = torch.ones_like(sel, dtype=torch.float)
                     lengths_sel = torch.ones_like(lengths).fill_(
-                        sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                        sel.shape[1])  # sel1.shape[1]-1
                     if not len(end_position) == 0:
                         ij_back = -1
                         for ij in end_position:
                             if not (ij[0] == ij_back):
                                 lengths_sel[ij[0]] = ij[1]
-                                masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of pad token in the end: 1
+                                masks_sel[ij[0], ij[1]:] = 0
                                 ij_back = ij[0]
                     char1 = word_to_chars_tensor(char.shape, sel, lengths_sel, word_alphabet, char_alphabet)
             else:
@@ -305,23 +303,6 @@ def main():
                 if 'tagger1' in parser_select:
                     temp = [[pos_alphabet.get_index(j[1]) for j in sudo_golden_tagger_1.tag(i)] for i in str_sel]
                     sudo_tags_pred_1 = [i + [1 for _ in range(sentence_max_length - len(i))] for i in temp]
-
-                # elif 'bist' in parser_select:
-                #     str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                #                one_stc in sel.cpu().numpy()]
-                #     stc_pred_1 = list(bist_parser.predict_stcs(str_sel, lengths_sel))
-                #     sudo_heads_pred_1 = np.array(
-                #         [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for stc
-                #          in stc_pred_1])
-
-                # ls_rl_bh, reward1, reward2, reward3, reward4, reward5 = loss_biaf_rl(sel, pb, predicted_out=tags_pred,
-                #                                                           golden_out=labels, mask_id=END_token,
-                #                                                           stc_length_out=lengths_sel,
-                #                                                           sudo_golden_out=sudo_tags_pred,
-                #                                                           sudo_golden_out_1=sudo_tags_pred_1,
-                #                                                           ori_words=word,
-                #                                                           ori_words_length=lengths
-                #                                                           )  # TODO: (sel, pb, heads)  # heads is replaced by dec_out.long().to(device)
 
                 res = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=tags_pred, golden_out=labels,
                                                    mask_id=END_token, stc_length_out=lengths_sel,

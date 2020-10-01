@@ -163,9 +163,9 @@ def main():
 
     print('Train seq2seq model using rl with reward of biaffine.')
 
-    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))  # TODO: 10.7
+    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
     seq2seq.to(device)
-    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))  # TODO: 10.7
+    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
     network.to(device)
 
     sudo_golden_tagger = SennaTagger(parser_b)
@@ -220,13 +220,13 @@ def main():
                     end_position = torch.eq(sel, END_token).nonzero()
                     masks_sel = torch.ones_like(sel, dtype=torch.float)
                     lengths_sel = torch.ones_like(lengths).fill_(
-                        sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                        sel.shape[1])
                     if not len(end_position) == 0:
                         ij_back = -1
                         for ij in end_position:
                             if not (ij[0] == ij_back):
                                 lengths_sel[ij[0]] = ij[1]
-                                masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of pad token in the end: 1
+                                masks_sel[ij[0], ij[1]:] = 0
                                 ij_back = ij[0]
                     char1 = word_to_chars_tensor(char.shape, sel, lengths_sel, word_alphabet, char_alphabet)
             else:
@@ -280,7 +280,7 @@ def main():
             print(len(generation_res))
             print('='*10)
         pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        pred_filename_test = 'tagging_dumped/' + prefix + 'gen.conllu'
+        pred_filename_test = 'tagging_dumped/' + prefix + '_gen.conllu'
         pred_writer_test.start(pred_filename_test)
         for raw, gen, pred, golden, length in generation_res:
             golden = [pos_alphabet.instances[i] for i in golden]
