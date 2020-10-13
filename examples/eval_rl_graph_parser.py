@@ -1,9 +1,5 @@
 from __future__ import print_function
 
-__author__ = 'max'
-"""
-Implementation of Bi-directional LSTM-CNNs-TreeCRF model for Graph-based dependency parsing.
-"""
 
 import sys
 import os
@@ -34,19 +30,14 @@ import global_variables
 
 uid = uuid.uuid4().hex[:6]
 
-
-# 3 sub-models should be pretrained in our approach
-#   seq2seq pretrain, denoising autoencoder  | or using token-wise adv to generate adv examples.
-#   structure prediction model
-#   oracle parser
-# then we train the seq2seq model using rl
-
+"""
+Just evaluation 
+"""
 
 def main():
     args_parser = argparse.ArgumentParser(description='Tuning with graph-based parsing')
     args_parser.add_argument('--mode', choices=['RNN', 'LSTM', 'GRU', 'FastLSTM'], help='architecture of rnn', required=True)
     args_parser.add_argument('--cuda', action='store_true', help='using GPU')
-    args_parser.add_argument('--num_epochs', type=int, default=200, help='Number of training epochs')
     args_parser.add_argument('--batch_size', type=int, default=64, help='Number of sentences in each batch')
     args_parser.add_argument('--hidden_size', type=int, default=256, help='Number of hidden units in RNN')
     args_parser.add_argument('--arc_space', type=int, default=128, help='Dimension of tag space')
@@ -57,39 +48,21 @@ def main():
     args_parser.add_argument('--char', action='store_true', help='use character embedding and CNN.')
     args_parser.add_argument('--pos_dim', type=int, default=50, help='Dimension of POS embeddings')
     args_parser.add_argument('--char_dim', type=int, default=50, help='Dimension of Character embeddings')
-    args_parser.add_argument('--opt', choices=['adam', 'sgd', 'adamax'], help='optimization algorithm')
-    args_parser.add_argument('--objective', choices=['cross_entropy', 'crf'], default='cross_entropy', help='objective function of training procedure.')
-    args_parser.add_argument('--decode', choices=['mst', 'greedy'], help='decoding algorithm', required=True)
-    args_parser.add_argument('--learning_rate', type=float, default=0.01, help='Learning rate')
-    args_parser.add_argument('--decay_rate', type=float, default=0.05, help='Decay rate of learning rate')
-    args_parser.add_argument('--clip', type=float, default=5.0, help='gradient clipping')
-    args_parser.add_argument('--gamma', type=float, default=0.0, help='weight for regularization')
-    args_parser.add_argument('--epsilon', type=float, default=1e-8, help='epsilon for adam or adamax')
     args_parser.add_argument('--p_rnn', nargs=2, type=float, required=True, help='dropout rate for RNN')
     args_parser.add_argument('--p_in', type=float, default=0.33, help='dropout rate for input embeddings')
     args_parser.add_argument('--p_out', type=float, default=0.33, help='dropout rate for output layer')
     args_parser.add_argument('--schedule', type=int, help='schedule for learning rate decay')
-    args_parser.add_argument('--unk_replace', type=float, default=0., help='The rate to replace a singleton word with UNK')
     args_parser.add_argument('--punctuation', nargs='+', type=str, help='List of punctuations')
     args_parser.add_argument('--word_embedding', choices=['glove', 'senna', 'sskip', 'polyglot'], help='Embedding for words', required=True)
     args_parser.add_argument('--word_path', help='path for word embedding dict')
     args_parser.add_argument('--freeze', action='store_true', help='frozen the word embedding (disable fine-tuning).')
     args_parser.add_argument('--char_embedding', choices=['random', 'polyglot'], help='Embedding for characters', required=True)
     args_parser.add_argument('--char_path', help='path for character embedding dict')
-    args_parser.add_argument('--train')  # "data/POS-penn/wsj/split1/wsj1.train.original"
-    args_parser.add_argument('--dev')  # "data/POS-penn/wsj/split1/wsj1.dev.original"
-    args_parser.add_argument('--test')  # "data/POS-penn/wsj/split1/wsj1.test.original"
+    args_parser.add_argument('--train')
+    args_parser.add_argument('--dev')
+    args_parser.add_argument('--test')
     args_parser.add_argument('--model_path', help='path for saving model file.', required=True)
     args_parser.add_argument('--model_name', help='name for saving model file.', required=True)
-
-    args_parser.add_argument('--seq2seq_save_path', default='models/seq2seq/seq2seq_save_model', type=str, help='seq2seq_save_path')
-    args_parser.add_argument('--network_save_path', default='models/seq2seq/network_save_model', type=str, help='network_save_path')
-
-    args_parser.add_argument('--seq2seq_load_path', default='models/seq2seq/seq2seq_save_model', type=str, help='seq2seq_load_path')
-    args_parser.add_argument('--network_load_path', default='models/seq2seq/network_save_model', type=str, help='network_load_path')
-
-    args_parser.add_argument('--rl_finetune_seq2seq_save_path', default='models/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_save_path')
-    args_parser.add_argument('--rl_finetune_network_save_path', default='models/rl_finetune/network_save_model', type=str, help='rl_finetune_network_save_path')
 
     args_parser.add_argument('--rl_finetune_seq2seq_load_path', default='models/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_load_path')
     args_parser.add_argument('--rl_finetune_network_load_path', default='models/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
@@ -102,25 +75,17 @@ def main():
     args_parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
     args_parser.add_argument('--unk_weight', type=float, default=100, help='reward weight of unk rate')
     args_parser.add_argument('--prefix', type=str, required=True)
-    args_parser.add_argument('--models', type=str, action='append', required=True)
 
     args = args_parser.parse_args()
 
-    logger = get_logger("GraphParser")
-
-    # SEED = 0
-    # torch.manual_seed(SEED)
-    # torch.cuda.manual_seed(SEED)
+    logger = get_logger("eval_rl")
 
     mode = args.mode
-    obj = args.objective
-    decoding = args.decode
     train_path = args.train
     dev_path = args.dev
     test_path = args.test
     model_path = args.model_path
     model_name = args.model_name
-    num_epochs = args.num_epochs
     batch_size = args.batch_size
     hidden_size = args.hidden_size
     arc_space = args.arc_space
@@ -128,21 +93,9 @@ def main():
     num_layers = args.num_layers
     num_filters = args.num_filters
 
-    # optimizer parameter
-    learning_rate = args.learning_rate
-    opt = args.opt
-    momentum = 0.9
-    betas = (0.9, 0.9)
-    eps = args.epsilon
-    decay_rate = args.decay_rate
-    clip = args.clip
-    gamma = args.gamma
-    schedule = args.schedule
-
     p_rnn = tuple(args.p_rnn)
     p_in = args.p_in
     p_out = args.p_out
-    unk_replace = args.unk_replace
     punctuation = args.punctuation
     port = args.port
 
@@ -162,7 +115,6 @@ def main():
     global_variables.UNK_REWARD_WEIGHT = args.unk_weight
 
     global_variables.PREFIX = args.prefix
-    SCORE_PREFIX = args.prefix.split('/')[-1]
 
     parser_select = ['stackPtr', 'bist']
 
@@ -177,7 +129,6 @@ def main():
 
     logger.info("Creating Alphabets")
     alphabet_path = os.path.join(model_path, 'alphabets/')
-    model_name = os.path.join(model_path, model_name)
     word_alphabet, char_alphabet, pos_alphabet, type_alphabet = conllx_data.create_alphabets(alphabet_path, train_path,
                                                                                              data_paths=[dev_path, test_path],
                                                                                              max_vocabulary_size=100000,
@@ -256,43 +207,17 @@ def main():
 
     # Pretrain structure prediction model (biaff model). model name: network
     window = 3
-    if obj == 'cross_entropy':
-        network = BiRecurrentConvBiAffine(word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters,
-                                          window,
-                                          mode, hidden_size, num_layers, num_types, arc_space, type_space,
-                                          embedd_word=word_table, embedd_char=char_table,
-                                          p_in=p_in, p_out=p_out, p_rnn=p_rnn, biaffine=True, pos=use_pos,
-                                          char=use_char)
-    elif obj == 'crf':
-        raise NotImplementedError
-    else:
-        raise RuntimeError('Unknown objective: %s' % obj)
-
-    def save_args():
-        arg_path = model_name + '.arg.json'
-        arguments = [word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters, window,
-                     mode, hidden_size, num_layers, num_types, arc_space, type_space]
-        kwargs = {'p_in': p_in, 'p_out': p_out, 'p_rnn': p_rnn, 'biaffine': True, 'pos': use_pos, 'char': use_char}
-        json.dump({'args': arguments, 'kwargs': kwargs}, open(arg_path, 'w'), indent=4)
+    network = BiRecurrentConvBiAffine(word_dim, num_words, char_dim, num_chars, pos_dim, num_pos, num_filters,
+                                      window,
+                                      mode, hidden_size, num_layers, num_types, arc_space, type_space,
+                                      embedd_word=word_table, embedd_char=char_table,
+                                      p_in=p_in, p_out=p_out, p_rnn=p_rnn, biaffine=True, pos=use_pos,
+                                      char=use_char)
 
     if freeze:
         freeze_embedding(network.word_embedd)
 
     network = network.to(device)
-
-    save_args()
-
-    opt_info = 'opt: %s, ' % opt
-    if opt == 'adam':
-        opt_info += 'betas=%s, eps=%.1e' % (betas, eps)
-    elif opt == 'sgd':
-        opt_info += 'momentum=%.2f' % momentum
-    elif opt == 'adamax':
-        opt_info += 'betas=%s, eps=%.1e' % (betas, eps)
-
-
-    network.load_state_dict(torch.load('models/parsing/biaffine/network.pt'))
-    network.to(device)
 
     shared_word_embedd = network.return_word_embedd()
     shared_word_embedd.weight.requires_grad = False
@@ -301,10 +226,10 @@ def main():
     seq2seq.emb.weight.requires_grad = False
     print(seq2seq)
 
-    seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
-    seq2seq.to(device)
-    network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
-    network.to(device)
+    # seq2seq.load_state_dict(torch.load(args.seq2seq_load_path + str(2) + '.pt'))
+    # seq2seq.to(device)
+    # network.load_state_dict(torch.load(args.network_load_path + str(2) + '.pt'))
+    # network.to(device)
 
 
     # import third_party_parser
@@ -369,168 +294,164 @@ def main():
 
     loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words, port=port).to(device)
 
-    for load_model_name in args.models:
-        print('=======' + load_model_name + '=========')
-        END_token = word_alphabet.instance2index['_PAD']
-        test_num = 0
+    END_token = word_alphabet.instance2index['_PAD']
+    test_num = 0
 
-        seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + load_model_name + '.pt'))
-        seq2seq.to(device)
-        network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + load_model_name + '.pt'))
-        network.to(device)
+    seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path))
+    seq2seq.to(device)
+    network.load_state_dict(torch.load(args.rl_finetune_network_load_path))
+    network.to(device)
 
-        ####eval######
-        seq2seq.eval()
-        network.eval()
+    ####eval######
+    seq2seq.eval()
+    network.eval()
 
-        decode = network.decode_mst
+    decode = network.decode_mst
 
-        ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = \
-            zlw_rewards1 = zlw_rewards2 = zlw_rewards3 = rewardsall1 = rewardsall2 = rewardsall3 = 0
-        pred_filename_test = 'dumped/%spred_test' % load_model_name
-        src_filename_test = 'dumped/%ssrc_test' % load_model_name
+    ls_rl_ep = rewards1 = rewards2 = rewards3 = rewards4 = rewards5 = \
+        zlw_rewards1 = zlw_rewards2 = zlw_rewards3 = rewardsall1 = rewardsall2 = rewardsall3 = 0
+    pred_filename_test = 'dumped/eval_pred_test'
+    src_filename_test = 'dumped/eval_src_test'
 
-        pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        pred_writer_test.start(pred_filename_test)
+    pred_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+    pred_writer_test.start(pred_filename_test)
 
-        src_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        src_writer_test.start(src_filename_test)
+    src_writer_test = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+    src_writer_test.start(src_filename_test)
 
-        pred_parse_writer_testA = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        pred_parse_writer_testA.start(pred_filename_test + '_parseA.txt')
+    pred_parse_writer_testA = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+    pred_parse_writer_testA.start(pred_filename_test + '_parseA.txt')
 
-        pred_parse_writer_testB = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        pred_parse_writer_testB.start(pred_filename_test + '_parseB.txt')
+    pred_parse_writer_testB = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+    pred_parse_writer_testB.start(pred_filename_test + '_parseB.txt')
 
-        pred_parse_writer_testC = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
-        pred_parse_writer_testC.start(pred_filename_test + '_parseC.txt')
+    pred_parse_writer_testC = CoNLLXWriter(word_alphabet, char_alphabet, pos_alphabet, type_alphabet)
+    pred_parse_writer_testC.start(pred_filename_test + '_parseC.txt')
 
-        nll = 0
-        token_num = 0
-        kk = 0
-        for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
+    nll = 0
+    token_num = 0
+    kk = 0
+    for batch in conllx_data.iterate_batch_tensor(data_test, batch_size):  # batch_size
 
-            kk += 1
-            # print('-------' + str(kk) + '-------')
-            # if kk > 10:
-            #     break
-            word, char, pos, heads, types, masks, lengths = batch
-            # print(lengths)
-            with torch.no_grad():
-                inp = word  # , _ = seq2seq.add_noise(word, lengths)
-                sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
-                end_position = torch.eq(sel, END_token).nonzero()
-                masks_sel = torch.ones_like(sel, dtype=torch.float)
-                lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])
-                if not len(end_position) == 0:
-                    ij_back = -1
-                    for ij in end_position:
-                        if not (ij[0] == ij_back):
-                            lengths_sel[ij[0]] = ij[1]
-                            masks_sel[ij[0], ij[1]:] = 0
-                            ij_back = ij[0]
+        kk += 1
+        print('-------' + str(kk) + '-------')
+        # if kk > 10:
+        #     break
+        word, char, pos, heads, types, masks, lengths = batch
+        # print(lengths)
+        with torch.no_grad():
+            inp = word  # , _ = seq2seq.add_noise(word, lengths)
+            sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+            end_position = torch.eq(sel, END_token).nonzero()
+            masks_sel = torch.ones_like(sel, dtype=torch.float)
+            lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])
+            if not len(end_position) == 0:
+                ij_back = -1
+                for ij in end_position:
+                    if not (ij[0] == ij_back):
+                        lengths_sel[ij[0]] = ij[1]
+                        masks_sel[ij[0], ij[1]:] = 0
+                        ij_back = ij[0]
 
-                heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel,
-                                                length=lengths_sel,
-                                                leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                if 'stackPtr' == parser_select[0]:
-                    sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
-                                                                                  lengths_sel, beam=1)
-                elif 'bist' == parser_select[0]:
-                    str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                               one_stc in sel.cpu().numpy()]
-                    stc_pred = list(bist_parser.predict_stcs(str_sel, lengths_sel))
-                    sudo_heads_pred = np.array(
-                        [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
-                         stc in stc_pred])
-                elif parser_select[0] == 'biaffine':
-                    sudo_heads_pred, _ = biaffine_parser.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
-                                                    length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                else:
-                    raise ValueError('Error first parser select code!')
+            heads_pred, types_pred = decode(sel, input_char=None, input_pos=None, mask=masks_sel,
+                                            length=lengths_sel,
+                                            leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+            if 'stackPtr' == parser_select[0]:
+                sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
+                                                                              lengths_sel, beam=1)
+            elif 'bist' == parser_select[0]:
+                str_sel = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                           one_stc in sel.cpu().numpy()]
+                stc_pred = list(bist_parser.predict_stcs(str_sel, lengths_sel))
+                sudo_heads_pred = np.array(
+                    [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
+                     stc in stc_pred])
+            elif parser_select[0] == 'biaffine':
+                sudo_heads_pred, _ = biaffine_parser.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
+                                                length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+            else:
+                raise ValueError('Error first parser select code!')
 
-                if 'stackPtr' == parser_select[1]:
-                    sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
-                                                                                        lengths_sel, beam=1)
-                elif 'bist' == parser_select[1]:
-                    str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
-                                 one_stc in sel.cpu().numpy()]
-                    stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
-                    sudo_heads_pred_1 = np.array(
-                        [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
-                         stc in stc_pred_1])
-                elif parser_select[1] == 'biaffine':
-                    sudo_heads_pred_1, _ = biaffine_parser_1.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
-                                                    length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
-                else:
-                    raise ValueError('Error second parser select code!')
+            if 'stackPtr' == parser_select[1]:
+                sudo_heads_pred_1, sudo_types_pred_1 = sudo_golden_parser_1.parsing(sel, None, None, masks_sel,
+                                                                                    lengths_sel, beam=1)
+            elif 'bist' == parser_select[1]:
+                str_sel_1 = [[word_alphabet.get_instance(one_word).encode('utf-8') for one_word in one_stc] for
+                             one_stc in sel.cpu().numpy()]
+                stc_pred_1 = list(bist_parser_1.predict_stcs(str_sel_1, lengths_sel))
+                sudo_heads_pred_1 = np.array(
+                    [[one_w.pred_parent_id for one_w in stc] + [0 for _ in range(sel.shape[1] - len(stc))] for
+                     stc in stc_pred_1])
+            elif parser_select[1] == 'biaffine':
+                sudo_heads_pred_1, _ = biaffine_parser_1.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
+                                                length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+            else:
+                raise ValueError('Error second parser select code!')
 
-                res = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=heads_pred, golden_out=heads,
-                                                   mask_id=END_token, stc_length_out=lengths_sel,
-                                                   sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1,
-                                                   ori_words=word, ori_words_length=lengths)
+            res = loss_biaf_rl.forward_verbose(sel, pb, predicted_out=heads_pred, golden_out=heads,
+                                               mask_id=END_token, stc_length_out=lengths_sel,
+                                               sudo_golden_out=sudo_heads_pred, sudo_golden_out_1=sudo_heads_pred_1,
+                                               ori_words=word, ori_words_length=lengths)
 
-            ls_rl_bh = res['loss'].item()
-            ls_rl_ep += ls_rl_bh
-            rewards1 += res['sum_me1']
-            rewards2 += res['sum_me2']
-            rewards3 += res['sum_me3']
-            rewards4 += res['sum_me4']
-            rewards5 += res['sum_me5']
-            rewardsall1 += res['sum_me1all']
-            rewardsall2 += res['sum_me2all']
-            rewardsall3 += res['sum_me3all']
-            zlw_rewards1 += res['cnt_me1']
-            zlw_rewards2 += res['cnt_me2']
-            zlw_rewards3 += res['cnt_me3']
-            sel = sel.detach().cpu().numpy()
-            lengths_sel = lengths_sel.detach().cpu().numpy()
-            # print(sel)
-            pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
-            src_writer_test.write_stc(word, lengths, symbolic_root=True)
-            pred_parse_writer_testA.write(sel, sel, heads_pred, types_pred, lengths_sel,symbolic_root=True)
-            pred_parse_writer_testB.write(sel, sel, sudo_heads_pred, types_pred, lengths_sel,symbolic_root=True)
-            pred_parse_writer_testC.write(sel, sel, sudo_heads_pred_1, types_pred, lengths_sel,symbolic_root=True)
+        ls_rl_bh = res['loss'].item()
+        ls_rl_ep += ls_rl_bh
+        rewards1 += res['sum_me1']
+        rewards2 += res['sum_me2']
+        rewards3 += res['sum_me3']
+        rewards4 += res['sum_me4']
+        rewards5 += res['sum_me5']
+        rewardsall1 += res['sum_me1all']
+        rewardsall2 += res['sum_me2all']
+        rewardsall3 += res['sum_me3all']
+        zlw_rewards1 += res['cnt_me1']
+        zlw_rewards2 += res['cnt_me2']
+        zlw_rewards3 += res['cnt_me3']
+        sel = sel.detach().cpu().numpy()
+        lengths_sel = lengths_sel.detach().cpu().numpy()
+        pred_writer_test.write_stc(sel, lengths_sel, symbolic_root=True)
+        src_writer_test.write_stc(word, lengths, symbolic_root=True)
+        pred_parse_writer_testA.write(sel, sel, heads_pred, types_pred, lengths_sel,symbolic_root=True)
+        pred_parse_writer_testB.write(sel, sel, sudo_heads_pred, types_pred, lengths_sel,symbolic_root=True)
+        pred_parse_writer_testC.write(sel, sel, sudo_heads_pred_1, types_pred, lengths_sel,symbolic_root=True)
 
-            test_num += sel.shape[0]
+        test_num += sel.shape[0]
 
-            for i in range(len(lengths_sel)):
-                nll += sum(pb[i, 1:lengths_sel[i]])
-            token_num += sum(lengths_sel) - len(lengths_sel)
-        # nll /= token_num
+        for i in range(len(lengths_sel)):
+            nll += sum(pb[i, 1:lengths_sel[i]])
+        token_num += sum(lengths_sel) - len(lengths_sel)
 
-        rewards1 = rewards1 * 1.0 / sum(data_test[1])
-        rewards2 = rewards2 * 1.0 / sum(data_test[1])
-        rewards3 = rewards3 * 1.0 / sum(data_test[1])
-        rewards4 = rewards4 * 1.0 / sum(data_test[1])
-        rewards5 = rewards5 * 1.0 / sum(data_test[1])
-        rewardsall1 = rewardsall1 * 1.0 / sum(data_test[1])
-        rewardsall2 = rewardsall2 * 1.0 / sum(data_test[1])
-        rewardsall3 = rewardsall3 * 1.0 / sum(data_test[1])
-        zlw_rewards1 = zlw_rewards1 * 1.0 / token_num
-        zlw_rewards2 = zlw_rewards2 * 1.0 / token_num
-        zlw_rewards3 = 1 - zlw_rewards3 * 1.0 / token_num
-        print('test loss: ', ls_rl_ep)
-        print('test reward parser b: ', rewards1)
-        print('test zlw reward parser b: ', zlw_rewards1)
-        print('test reward parser c: ', rewards2)
-        print('test zlw reward parser c: ', zlw_rewards2)
-        print('test reward parser b^c: ', rewards3)
-        print('test zlw reward parser b^c: ', zlw_rewards3)
-        print('test reward meaning: ', rewards4)
-        print('test reward fluency: ', rewards5)
+    rewards1 = rewards1 * 1.0 / sum(data_test[1])
+    rewards2 = rewards2 * 1.0 / sum(data_test[1])
+    rewards3 = rewards3 * 1.0 / sum(data_test[1])
+    rewards4 = rewards4 * 1.0 / sum(data_test[1])
+    rewards5 = rewards5 * 1.0 / sum(data_test[1])
+    rewardsall1 = rewardsall1 * 1.0 / sum(data_test[1])
+    rewardsall2 = rewardsall2 * 1.0 / sum(data_test[1])
+    rewardsall3 = rewardsall3 * 1.0 / sum(data_test[1])
+    zlw_rewards1 = zlw_rewards1 * 1.0 / token_num
+    zlw_rewards2 = zlw_rewards2 * 1.0 / token_num
+    zlw_rewards3 = 1 - zlw_rewards3 * 1.0 / token_num
+    print('test loss: ', ls_rl_ep)
+    print('test reward parser b: ', rewards1)
+    print('test zlw reward parser b: ', zlw_rewards1)
+    print('test reward parser c: ', rewards2)
+    print('test zlw reward parser c: ', zlw_rewards2)
+    print('test reward parser b^c: ', rewards3)
+    print('test zlw reward parser b^c: ', zlw_rewards3)
+    print('test reward meaning: ', rewards4)
+    print('test reward fluency: ', rewards5)
 
-        print('test metrics whole parser b: ', rewardsall1)
-        print('test metrics whole parser c: ', rewardsall2)
-        print('test metrics whole parser b^c: ', rewardsall3)
+    print('test metrics whole parser b: ', rewardsall1)
+    print('test metrics whole parser c: ', rewardsall2)
+    print('test metrics whole parser b^c: ', rewardsall3)
 
-        print('test nll: ', nll)
+    print('test nll: ', nll)
 
-        pred_writer_test.close()
-        src_writer_test.close()
-        pred_parse_writer_testA.close()
-        pred_parse_writer_testB.close()
-        pred_parse_writer_testC.close()
+    pred_writer_test.close()
+    src_writer_test.close()
+    pred_parse_writer_testA.close()
+    pred_parse_writer_testB.close()
+    pred_parse_writer_testC.close()
 
 if __name__ == '__main__':
     main()

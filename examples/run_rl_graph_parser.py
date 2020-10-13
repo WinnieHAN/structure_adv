@@ -1,10 +1,5 @@
 from __future__ import print_function
 
-__author__ = 'max'
-"""
-Implementation of Bi-directional LSTM-CNNs-TreeCRF model for Graph-based dependency parsing.
-"""
-
 import sys
 import os
 
@@ -34,20 +29,19 @@ import global_variables
 
 uid = uuid.uuid4().hex[:6]
 
-
-# 3 sub-models should be pretrained in our approach
-#   seq2seq pretrain, denoising autoencoder  | or using token-wise adv to generate adv examples.
-#   structure prediction model
-#   oracle parser
-# then we train the seq2seq model using rl
-
+"""
+3 sub-models should be pretrained in our approach
+  seq2seq pretrain, denoising autoencoder
+  structure prediction model : victim parser and two reference parsers.
+then we train the seq2seq model using rl
+"""
 
 def main():
     args_parser = argparse.ArgumentParser(description='Tuning with graph-based parsing')
     args_parser.add_argument('--mode', choices=['RNN', 'LSTM', 'GRU', 'FastLSTM'], help='architecture of rnn', required=True)
     args_parser.add_argument('--cuda', action='store_true', help='using GPU')
     args_parser.add_argument('--num_epochs', type=int, default=200, help='Number of training epochs')
-    args_parser.add_argument('--batch_size', type=int, default=64, help='Number of sentences in each batch')
+    args_parser.add_argument('--batch_size', type=int, default=16, help='Number of sentences in each batch')
     args_parser.add_argument('--hidden_size', type=int, default=256, help='Number of hidden units in RNN')
     args_parser.add_argument('--arc_space', type=int, default=128, help='Dimension of tag space')
     args_parser.add_argument('--type_space', type=int, default=128, help='Dimension of tag space')
@@ -76,17 +70,14 @@ def main():
     args_parser.add_argument('--freeze', action='store_true', help='frozen the word embedding (disable fine-tuning).')
     args_parser.add_argument('--char_embedding', choices=['random', 'polyglot'], help='Embedding for characters', required=True)
     args_parser.add_argument('--char_path', help='path for character embedding dict')
-    args_parser.add_argument('--train')  # "data/POS-penn/wsj/split1/wsj1.train.original"
-    args_parser.add_argument('--dev')  # "data/POS-penn/wsj/split1/wsj1.dev.original"
-    args_parser.add_argument('--test')  # "data/POS-penn/wsj/split1/wsj1.test.original"
+    args_parser.add_argument('--train')
+    args_parser.add_argument('--dev')
+    args_parser.add_argument('--test')
     args_parser.add_argument('--model_path', help='path for saving model file.', required=True)
     args_parser.add_argument('--model_name', help='name for saving model file.', required=True)
 
-    args_parser.add_argument('--seq2seq_save_path', default='models/seq2seq/seq2seq_save_model', type=str, help='seq2seq_save_path')
-    args_parser.add_argument('--network_save_path', default='models/seq2seq/network_save_model', type=str, help='network_save_path')
-
-    args_parser.add_argument('--seq2seq_load_path', default='models/seq2seq/seq2seq_save_model', type=str, help='seq2seq_load_path')
-    args_parser.add_argument('--network_load_path', default='models/seq2seq/network_save_model', type=str, help='network_load_path')
+    args_parser.add_argument('--seq2seq_load_path', default='models/seq2seq/seq2seq_save_model', type=str, help='pretrained seq2seq_load_path')
+    args_parser.add_argument('--network_load_path', default='models/seq2seq/network_save_model', type=str, help='pretrained network (victim model)_load_path')
 
     args_parser.add_argument('--rl_finetune_seq2seq_save_path', default='models/rl_finetune/seq2seq_save_model', type=str, help='rl_finetune_seq2seq_save_path')
     args_parser.add_argument('--rl_finetune_network_save_path', default='models/rl_finetune/network_save_model', type=str, help='rl_finetune_network_save_path')
@@ -95,16 +86,16 @@ def main():
     args_parser.add_argument('--rl_finetune_network_load_path', default='models/rl_finetune/network_save_model', type=str, help='rl_finetune_network_load_path')
 
     args_parser.add_argument('--port', type=int, default=10048, help='localhost port for berscore server')
-    args_parser.add_argument('--z1_weight', type=float, default=1.0, help='reward weight of z1')
-    args_parser.add_argument('--z2_weight', type=float, default=1.0, help='reward weight of z2')
-    args_parser.add_argument('--z3_weight', type=float, default=1.0, help='reward weight of z3')
+    args_parser.add_argument('--z1_weight', type=float, default=1.0, help='reward weight of same with reference parser B')
+    args_parser.add_argument('--z2_weight', type=float, default=1.0, help='reward weight of same with reference parser C')
+    args_parser.add_argument('--z3_weight', type=float, default=1.0, help='reward weight of same with reference parser B&C')
     args_parser.add_argument('--mp_weight', type=float, default=100, help='reward weight of meaning preservation')
     args_parser.add_argument('--ppl_weight', type=float, default=0.001, help='reward weight of ppl')
-    args_parser.add_argument('--unk_weight', type=float, default=100, help='reward weight of unk rate')
+    args_parser.add_argument('--unk_weight', type=float, default=500, help='reward weight of unk work rate')
     args_parser.add_argument('--prefix', type=str, default='/home/zhanglw/code/structure_adv/test_')
     args = args_parser.parse_args()
 
-    logger = get_logger("GraphParser")
+    logger = get_logger("rl_graph_parser")
 
     # SEED = 0
     # torch.manual_seed(SEED)
@@ -376,16 +367,16 @@ def main():
         biaffine_parser_1.load_state_dict(torch.load('models/parsing/biaffine2/network.pt'))
         biaffine_parser_1.eval()
 
-    M = 1  # this is the size of beam searching ?
+    M = 1
     seq2seq.emb.weight.requires_grad = False
     parameters_need_update = filter(lambda p: p.requires_grad, seq2seq.parameters())
     optim_bia_rl = torch.optim.Adam(parameters_need_update, lr=learning_rate)  # 1e-5 0.00005
     loss_biaf_rl = LossBiafRL(device=device, word_alphabet=word_alphabet, vocab_size=num_words, port=port).to(device)
 
     # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))
-    seq2seq.to(device)
+    # seq2seq.to(device)
     # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + '_' + SCORE_PREFIX + str(0) + '.pt'))
-    network.to(device)
+    # network.to(device)
 
     for epoch_i in range(0, num_epochs):
         print('=======' + str(epoch_i) + '=========')
