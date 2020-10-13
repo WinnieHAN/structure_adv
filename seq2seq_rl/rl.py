@@ -138,7 +138,7 @@ class LossBiafRL1(nn.Module):
         batch = sel.shape[0]
         rewards = []
         for i in range(batch):  #batch
-            reward = self.get_reward(predicted_out[i], sudo_golden_out[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward(predicted_out[i], sudo_golden_out[i], stc_length_out[i], ori_words[i], ori_words_length[i])  
             rewards.append(reward)
         rewards = np.asarray(rewards)
         for j in range(stc_length_seq):
@@ -161,7 +161,7 @@ class LossBiafRL1(nn.Module):
         batch = sel.shape[0]
         rewards = []
         for i in range(batch):  #batch
-            reward = self.get_reward(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward(predicted_out[i], sudo_golden_out_1[i], stc_length_out[i], ori_words[i], ori_words_length[i])  
             rewards.append(reward)
         rewards = np.asarray(rewards)
 
@@ -312,7 +312,7 @@ class LossBiafRL(nn.Module):
         batch = sel.shape[0]
         rewards_z1 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  
             rewards_z1.append(reward)
         rewards_z1 = np.asarray(rewards_z1)
 
@@ -320,7 +320,7 @@ class LossBiafRL(nn.Module):
         batch = sel.shape[0]
         rewards_z2 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  
             rewards_z2.append(reward)
         rewards_z2 = np.asarray(rewards_z2)
 
@@ -328,7 +328,7 @@ class LossBiafRL(nn.Module):
         batch = sel.shape[0]
         rewards_z3 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  
             rewards_z3.append(reward)
         rewards_z3 = np.asarray(rewards_z3)
 
@@ -394,7 +394,7 @@ class LossBiafRL(nn.Module):
         metrics1 = []
         metricsall1 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  
             rewards_z1.append(reward)
             metrics1.append(1.0-(reward*1.0/(list_stc_length_out[i]-1)))
             allsame = 1 if reward == 0 else 0
@@ -409,7 +409,7 @@ class LossBiafRL(nn.Module):
         metrics2 = []
         metricsall2 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  
             rewards_z2.append(reward)
             metrics2.append(1.0-(reward*1.0/(list_stc_length_out[i]-1)))
             allsame = 1 if reward==0 else 0
@@ -425,7 +425,7 @@ class LossBiafRL(nn.Module):
         cnt_misc3 = []
         metricsall3 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  
             metric3 = self.get_same_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], stc_length_out[i], ori_words[i],ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
 
             stc_diff = self.get_diff_bc(sudo_golden_out[i], sudo_golden_out_1[i], predicted_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  # we now only consider a simple case. the result of a third-party parser should be added here.
@@ -625,7 +625,7 @@ class TagLossBiafRL(nn.Module): # parsers
         batch = sel.shape[0]
         rewards_z3 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_same(sudo_golden_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  
             rewards_z3.append(reward)
         rewards_z3 = np.asarray(rewards_z3) *0.01
 
