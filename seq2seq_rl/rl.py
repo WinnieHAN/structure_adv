@@ -5,11 +5,7 @@ import torch, os, codecs
 import socket
 
 import global_variables
-# ref = [[1, 2, 3, 4, 5, 6]]
-# cnd = [1, 3, 4, 5, 6]
-# bleu = BLEU(ref, cnd)
-#
-# print('BLEU: %.4f%%' % (bleu * 100))
+
 
 
 def get_bleu(out, dec_out, vocab_size):
@@ -106,10 +102,7 @@ class LossBiafRL1(nn.Module):
         self.vocab_size = vocab_size
 
     def get_reward(self, out, dec_out, length_out, ori_words, ori_words_length):
-        # out = out.tolist()
-        # dec_out = dec_out.tolist()
-        # word_alphabet.get_instance(one_word).encode('utf-8')
-        # reward = 0
+
         stc_dda = sum([0 if out[i] == dec_out[i] else 1 for i in range(1, length_out)])
 
         reward = stc_dda
@@ -136,34 +129,7 @@ class LossBiafRL1(nn.Module):
 
 
     def forward(self, sel, pb, predicted_out, golden_out, mask_id, stc_length_out, sudo_golden_out, sudo_golden_out_1, ori_words, ori_words_length):
-        # ls = 0
-        # cnt = 0
-        #
-        # stc_length = sel.shape[1]
-        # sel = sel.detach().cpu().numpy()
-        # golden_out = golden_out.cpu().numpy()
-        #
-        # batch = sel.shape[0]
-        # bleus = []
-        # for i in range(batch):  #batch
-        #     bleu = get_reward(predicted_out[i], golden_out[i], stc_length_out[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
-        #     bleus.append(bleu)
-        # bleus = np.asarray(bleus)
-        #
-        # wgt = np.asarray([1 for _ in range(batch)])
-        # for j in range(stc_length):
-        #     ls += (- pb[:, j] *
-        #            torch.from_numpy(bleus - self.bl).float().cuda() *
-        #            torch.from_numpy(wgt.astype(float)).float().cuda()).sum()
-        #     cnt += np.sum(wgt)
-        #
-        #     wgt = wgt.__and__(sel[:, j] != mask_id)  # vocab_size + 1
-        #
-        # ls /= cnt
-        #
-        # bleu = np.average(bleus)
-        # self.bl = (self.bl * self.bn + bleu) / (self.bn + 1)
-        # self.bn += 1
+
 
         ####1####
         ls1 = 0
@@ -210,7 +176,6 @@ class LossBiafRL1(nn.Module):
             cnt2 += np.sum(wgt2)
 
         ls2 /= cnt2
-        rewards_ave2 = np.average(rewards)
 
         ####3#####add meaning_preservation as reward
         ls3 = 0
@@ -243,7 +208,7 @@ class LossBiafRL1(nn.Module):
 
 
         loss = ls3
-        # loss = ls1
+
         return loss, ls1, ls3, rewards_ave1, rewards_ave3 #loss, ls, ls1, bleu, bleu1
 
 
@@ -300,11 +265,7 @@ class LossBiafRL(nn.Module):
         sock.sendall(message)
 
         rec_data = sock.recv(1024)
-        # byte_res = rec_data
-        # while len(rec_data) == 0:
-        #     rec_data = self.sock.recv(102400)
-        #     byte_res += rec_data
-        # received = json.loads(rec_data)
+
         sock.close()
         if rec_data == 'done':
             meaning_preservation = np.loadtxt(global_variables.PREFIX + 'temp.txt')
@@ -373,23 +334,12 @@ class LossBiafRL(nn.Module):
 
         ####3#####add meaning_preservation as reward
         batch = sel.shape[0]
-        # self.write_text(ori_words, ori_words_length, sel, stc_length_out)
-        # os.system('/hdd2/zhanglw/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py --prefix ' + SCORE_PREFIX)
-        # meaning_preservation = np.loadtxt(SCORE_PREFIX + 'temp.txt')*100
-        # logppl = np.loadtxt(SCORE_PREFIX + 'temp_ppl.txt') # * (-0.1)
-        #
+
         meaning_preservation, logppl = self.get_bertscore_ppl(ori_words, ori_words_length, sel, stc_length_out)
         meaning_preservation = np.array(meaning_preservation)
         ppl = -np.exp(np.array(logppl))
 
-        # bleus_w = []
-        # for i in range(batch):
-        #     bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
-        #
-        #     bleus_w.append(bleu)
-        # bleus_w = np.asarray(bleus_w)
 
-        #-----------------------------------------------
 
         ###6### unk rate
         unk_rewards = []
@@ -424,12 +374,7 @@ class LossBiafRL(nn.Module):
 
         loss = ls3
 
-        # print('rewards_z1: ', np.average(rewards_z1))
-        # print('rewards_z2: ', np.average(rewards_z2))
-        # print('meaning_preservation: ', np.average(meaning_preservation))
-        # print('ppl: ', np.average(ppl))
 
-        # loss = ls1
         return loss, \
                np.average(rewards_z1) * global_variables.Z1_REWARD_WEIGHT, \
                np.average(rewards_z2) * global_variables.Z2_REWARD_WEIGHT, \
@@ -496,25 +441,14 @@ class LossBiafRL(nn.Module):
 
         ####3#####add meaning_preservation as reward
         batch = sel.shape[0]
-        # self.write_text(ori_words, ori_words_length, sel, stc_length_out)
-        # os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
-        # meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')*100
-        # logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt') # * (-0.1)
-        # ppl = -np.exp(logppl) * 0.001
+
         meaning_preservation, logppl = self.get_bertscore_ppl(ori_words, ori_words_length, sel, stc_length_out)
         meaning_preservation = np.array(meaning_preservation)
         ppl = -np.exp(np.array(logppl))
         metrics4 = meaning_preservation
         metrics5 = logppl
 
-        # rewards = meaning_preservation * 10  # affect more
 
-        # bleus_w = []
-        # for i in range(batch):
-        #     bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
-        #
-        #     bleus_w.append(bleu)
-        # bleus_w = np.asarray(bleus_w)
 
         unk_rewards = []
         list_sel = sel.cpu().float().numpy().tolist()
@@ -551,12 +485,7 @@ class LossBiafRL(nn.Module):
 
         loss = ls3
 
-        # print('rewards_z1: ', np.average(rewards_z1))
-        # print('rewards_z2: ', np.average(rewards_z2))
-        # print('meaning_preservation: ', np.average(meaning_preservation))
-        # print('ppl: ', np.average(ppl))
 
-        # loss = ls1
         res = {}
         res['loss'] = loss
         res['avg_z1'] = np.average(rewards_z1)
@@ -581,8 +510,6 @@ class LossBiafRL(nn.Module):
 
         return res
 
-        # return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(rewards_z3), np.average(meaning_preservation), np.average(ppl) , np.sum(metrics1), np.sum(metrics2), np.sum(metrics3), np.sum(metrics4), np.sum(metrics5), np.sum(metricsall1), np.sum(metricsall2), np.sum(metricsall3)  # loss, ls, ls1, bleu, bleu1
- #loss, ls, ls1, bleu, bleu1
 
 class TagLossBiafRL(nn.Module): # parsers
     def __init__(self, device, word_alphabet, vocab_size, port):
@@ -636,11 +563,7 @@ class TagLossBiafRL(nn.Module): # parsers
         sock.sendall(message)
 
         rec_data = sock.recv(1024)
-        # byte_res = rec_data
-        # while len(rec_data) == 0:
-        #     rec_data = self.sock.recv(102400)
-        #     byte_res += rec_data
-        # received = json.loads(rec_data)
+
         sock.close()
         if rec_data == 'done':
             meaning_preservation = np.loadtxt(global_variables.PREFIX + 'temp.txt')
@@ -686,7 +609,7 @@ class TagLossBiafRL(nn.Module): # parsers
         batch = sel.shape[0]
         rewards_z1 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])
             rewards_z1.append(reward)
         rewards_z1 = np.asarray(rewards_z1)
 
@@ -694,7 +617,7 @@ class TagLossBiafRL(nn.Module): # parsers
         batch = sel.shape[0]
         rewards_z2 = []
         for i in range(batch):  #batch
-            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])  #  we now only consider a simple case. the result of a third-party parser should be added here.
+            reward = self.get_reward_diff(predicted_out[i], sudo_golden_out_1[i], list_stc_length_out[i], ori_words[i], ori_words_length[i])
             rewards_z2.append(reward)
         rewards_z2 = np.asarray(rewards_z2)
 
@@ -708,24 +631,12 @@ class TagLossBiafRL(nn.Module): # parsers
 
         ####3#####add meaning_preservation as reward
         batch = sel.shape[0]
-        # self.write_text(ori_words, ori_words_length, sel, stc_length_out)
-        # os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
-        # meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')#*100
-        # logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt') # * (-0.1)
-        # ppl = -np.exp(logppl) * 0.001
-        # # rewards = meaning_preservation * 10  # affect more
+
 
         meaning_preservation, logppl = self.get_bertscore_ppl(ori_words, ori_words_length, sel, stc_length_out)
         meaning_preservation = np.array(meaning_preservation)
         ppl = -np.exp(np.array(logppl))
 
-        # # === bleu reward ==
-        # bleus_w = []
-        # for i in range(batch):
-        #     bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
-        #
-        #     bleus_w.append(bleu)
-        # bleus_w = np.asarray(bleus_w)
 
         ###6### unk rate
         unk_rewards = []
@@ -763,12 +674,6 @@ class TagLossBiafRL(nn.Module): # parsers
 
         loss = ls3
 
-        # print('rewards_z1: ', np.average(rewards_z1))
-        # print('rewards_z2: ', np.average(rewards_z2))
-        # print('meaning_preservation: ', np.average(meaning_preservation))
-        # print('ppl: ', np.average(ppl))
-
-        # loss = ls1
         return loss, \
                np.average(rewards_z1) * global_variables.Z1_REWARD_WEIGHT, \
                np.average(rewards_z2) * global_variables.Z2_REWARD_WEIGHT, \
@@ -836,12 +741,7 @@ class TagLossBiafRL(nn.Module): # parsers
 
         ####3#####add meaning_preservation as reward
         batch = sel.shape[0]
-        # self.write_text(ori_words, ori_words_length, sel, stc_length_out)
-        # os.system('/home/hanwj/anaconda3/envs/bertscore/bin/python seq2seq_rl/get_bertscore_ppl.py')
-        # meaning_preservation = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp.txt')  # *100
-        # logppl = np.loadtxt('/home/hanwj/PycharmProjects/structure_adv/temp_ppl.txt')  # * (-0.1)
-        # ppl = -np.exp(logppl) * 0.001
-        # # rewards = meaning_preservation * 10  # affect more
+
 
         meaning_preservation, logppl = self.get_bertscore_ppl(ori_words, ori_words_length, sel, stc_length_out)
         meaning_preservation = np.array(meaning_preservation)
@@ -849,14 +749,8 @@ class TagLossBiafRL(nn.Module): # parsers
         metrics4 = meaning_preservation
         metrics5 = logppl
 
-        # bleus_w = []
-        # for i in range(batch):
-        #     bleu = get_bleu(ori_words[i], sel[i], self.vocab_size)
-        #
-        #     bleus_w.append(bleu)
-        # bleus_w = np.asarray(bleus_w)
 
-        ###6### unk rate
+        ###6### unk rate ######
         unk_rewards = []
         list_sel = sel.cpu().float().numpy().tolist()
         for i in range(batch):
@@ -892,16 +786,6 @@ class TagLossBiafRL(nn.Module): # parsers
 
         loss = ls3
 
-        # print('rewards_z1: ', np.average(rewards_z1))
-        # print('rewards_z2: ', np.average(rewards_z2))
-        # print('meaning_preservation: ', np.average(meaning_preservation))
-        # print('ppl: ', np.average(ppl))
-
-        # loss = ls1
-        # return loss, np.average(rewards_z1), np.average(rewards_z2), np.average(rewards_z3), np.average(
-        #     meaning_preservation), np.average(ppl), np.sum(metrics1), np.sum(metrics2), np.sum(metrics3), np.sum(metrics4), np.sum(metrics5), np.sum(metricsall1), np.sum(metricsall2), np.sum(metricsall3)  # loss, ls, ls1, bleu, bleu1
-
-        # loss = ls1
         res = {}
         res['loss'] = loss
         res['avg_z1'] = np.average(rewards_z1)
