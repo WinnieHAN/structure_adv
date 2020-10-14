@@ -24,7 +24,7 @@ Source codes used in EMNLP 2020 paper, *Adversarial Attack and Defense of Struct
 
 3. Downloading sskip embedding and conllu format PTB dataset.
 ## Dependency Parsing #
-1. pretrain parser model. Or you can download our pretrained model here: biaffine, stackptr, bist
+1. pretrain parser model. Or you can download our pretrained model here: [biaffine](https://drive.google.com/file/d/1b_koVg6uER7CZchDNdtzdKzswe0CJ2sD/view?usp=sharing), [stackptr](https://drive.google.com/file/d/1f27XJKmbFZlXgocGA0sjEekmxuCSoW8H/view?usp=sharing), [bist](https://drive.google.com/file/d/1kYxeSYaEk31rFYs1LSkQG3fBWYkcN4sE/view?usp=sharing)
 ```shell script
 # pretrain victim model
 $ sh examples/run_graphParser.sh
@@ -38,7 +38,7 @@ $ sh test.sh
 ```
 
 2. Move biaffine parser and stackPtr parser to ```./models/parsing/{biaffine, stack_ptr}```. Move pretrained bist parser to ```bist_parser/pretrained/model1```.
-3. Pretrain seq2seq sentence generator. Or you also can get our trained seq2sq model here.
+3. Pretrain seq2seq sentence generator. Or you also can get our trained seq2sq model [here](https://drive.google.com/file/d/1MkDL5bhWoS7wiVG2pfUtdOtp_f6DO_nw/view?usp=sharing).
 ```shell script
 $ /path/to/python2/envs/python examples/pretrain_seq2seq.py --cuda --mode LSTM \
 --num_epochs 30 --batch_size 64 --hidden_size 512 --num_layers 3 --pos_dim 100 --char_dim 100 --num_filters 100 \
@@ -55,18 +55,18 @@ $ /path/to/python2/envs/python examples/pretrain_seq2seq.py --cuda --mode LSTM \
 ```shell script
 $ sh examples/run_rl_graph_parser.py
 ``` 
-5. You also can download our trained model here. And run eval to get results report in paper.
+5. You also can download our trained model [here](https://drive.google.com/drive/folders/1GWSgZgNiCbDsZSQaiU_32AqCcGDIlNSo?usp=sharing). And run eval to get results report in paper.
 ```shell script
 $ sh examples/eval_rl_graph_parser.py 
 ```
 
 ### POS Tagging
-1. Pretrain the victim model.
+1. Pretrain the victim model. Or you also can get our pretrained version [here](https://drive.google.com/file/d/1jbS0rxveHRxUEkTCZCDKkaEjoobzmWq1/view?usp=sharing).
 ```shell script
 $ sh run_posCRFTagger.sh
 ```
 2. Download and unzip reference parser: [stanford-postagger](http://nlp.stanford.edu/software/stanford-postagger-2015-04-20.zip), [senna](http://ronan.collobert.com/senna/senna-v3.0.tgz). 
-3. Pretrain the seq2seq model.
+3. Pretrain the seq2seq model. Or you also can download our pretrained version [here](https://drive.google.com/file/d/1gNe5kpH6PXw6DPK7YrGL3s39--wT2eJ_/view?usp=sharing)
 ```shell script
 /path/to/python2/envs/python examples/pretrain_seq2seq.py --cuda --mode LSTM \
 --num_epochs 30 --batch_size 64 --hidden_size 256 --num_layers 1 --char_dim 30 --num_filters 30 \
@@ -83,7 +83,7 @@ $ sh run_posCRFTagger.sh
 ```shell script
 $ sh examples/run_adv_tagger.sh
 ```
-5. You also can download our trained model here. And run eval to get results report in paper.
+5. You also can download our trained model [here](https://drive.google.com/drive/folders/1lCQjsAIjthcWRL2P3cL5dofwRnJAijdM?usp=sharing). And run eval to get results report in paper.
 ```shell script
 $ sh examples/eval_adv_tagger.py 
 ```
