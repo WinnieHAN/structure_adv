@@ -286,7 +286,7 @@ def main():
     def save_data(prefix, name, holder):
         # save generation result back to
         save_path_golden = 'data/ptb/gen' + prefix + '_' + name + '_golden' + '.conllu'
-        save_path_pred = 'data/ptb/gen' + prefix + '_' + name + '_golden' + '.conllu'
+        save_path_pred = 'data/ptb/gen' + prefix + '_' + name + '_pred' + '.conllu'
 
         raw_sents = []
         gen_sents = []
@@ -326,10 +326,10 @@ def main():
     # Begin generate
     for prefix in args.prefix:
         # load pretrained model
-        seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + prefix + '.pt'))
+        # seq2seq.load_state_dict(torch.load(args.rl_finetune_seq2seq_load_path + prefix + '.pt'))
         # seq2seq.load_state_dict(torch.load('models/seq2seq/seq2seq_save_model2.pt'))
         seq2seq.to(device)
-        network.load_state_dict(torch.load(args.rl_finetune_network_load_path + prefix + '.pt'))
+        # network.load_state_dict(torch.load(args.rl_finetune_network_load_path + prefix + '.pt'))
         # network.load_state_dict(torch.load('models/seq2seq/network_save_model2.pt'))
         network.to(device)
 
@@ -342,27 +342,31 @@ def main():
         cnt = 0
 
         with torch.no_grad():
-            for batch in conllx_data.iterate_batch_tensor(data_train, batch_size):  # batch_size
+            for batch in conllx_data.iterate_batch_tensor(data_train, batch_size, shuffle=True):  # batch_size
+                print('--'*10)
                 print(cnt)
 
                 word, char, pos, heads, types, masks, lengths = batch
 
                 inp = word
-                sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+                # sel, pb = seq2seq(inp.long().to(device), LEN=inp.size()[1])
+                sel = word
                 end_position = torch.eq(sel, END_token).nonzero()
-                masks_sel = torch.ones_like(sel, dtype=torch.float)
-                lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])  # sel1.shape[1]-1 TODO: because of end token in the end
+                # masks_sel = torch.ones_like(sel, dtype=torch.float)
+                masks_sel = masks
+                # lengths_sel = torch.ones_like(lengths).fill_(sel.shape[1])
+                lengths_sel = lengths
                 if not len(end_position) == 0:
                     ij_back = -1
                     for ij in end_position:
                         if not (ij[0] == ij_back):
                             lengths_sel[ij[0]] = ij[1]
-                            masks_sel[ij[0], ij[1]:] = 0  # -1 TODO: because of end token in the end
+                            masks_sel[ij[0], ij[1]:] = 0
                             ij_back = ij[0]
 
                 # current parsing result
-                heads_pred, types_pred = network.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
-                                                            length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
+                # heads_pred, types_pred = network.decode_mst(sel, input_char=None, input_pos=None, mask=masks_sel,
+                #                                             length=lengths_sel, leading_symbolic=conllx_data.NUM_SYMBOLIC_TAGS)
                 if 'stackPtr' == parser_select[0]:
                     sudo_heads_pred, sudo_types_pred = sudo_golden_parser.parsing(sel, None, None, masks_sel,
                                                                                   lengths_sel, beam=1)
@@ -402,22 +406,22 @@ def main():
                 lens = lengths_sel.cpu().numpy().tolist()
                 for i in range(batch[0].size()[0]):
                     cnt += 1
-                    parse_ab = False
-                    if parse_diff(heads_pred[i], sudo_heads_pred[i], lens[i]) != 0:
-                        parse_ab = True
-                        ab_diff.append((word[i].cpu().numpy().tolist(),
-                                        sel[i].cpu().numpy().tolist(),
-                                        heads_pred[i].tolist(),
-                                        sudo_heads_pred[i].tolist(),
-                                        lengths_sel[i].item()))
-                    parse_ac = False
-                    if parse_diff(heads_pred[i], sudo_heads_pred_1[i], lens[i]) != 0:
-                        parse_ac = True
-                        ac_diff.append((word[i].cpu().numpy().tolist(),
-                                        sel[i].cpu().numpy().tolist(),
-                                        heads_pred[i].tolist(),
-                                        sudo_heads_pred_1[i].tolist(),
-                                        lengths_sel[i].item()))
+                    # parse_ab = False
+                    # if parse_diff(heads_pred[i], sudo_heads_pred[i], lens[i]) != 0:
+                    #     parse_ab = True
+                    #     ab_diff.append((word[i].cpu().numpy().tolist(),
+                    #                     sel[i].cpu().numpy().tolist(),
+                    #                     heads_pred[i].tolist(),
+                    #                     sudo_heads_pred[i].tolist(),
+                    #                     lengths_sel[i].item()))
+                    # parse_ac = False
+                    # if parse_diff(heads_pred[i], sudo_heads_pred_1[i], lens[i]) != 0:
+                    #     parse_ac = True
+                    #     ac_diff.append((word[i].cpu().numpy().tolist(),
+                    #                     sel[i].cpu().numpy().tolist(),
+                    #                     heads_pred[i].tolist(),
+                    #                     sudo_heads_pred_1[i].tolist(),
+                    #                     lengths_sel[i].item()))
                     parse_bc = False
                     if parse_diff(sudo_heads_pred[i], sudo_heads_pred_1[i], lens[i]) == 0:
                         parse_bc = True
@@ -426,16 +430,18 @@ def main():
                                         sudo_heads_pred[i].tolist(),
                                         sudo_heads_pred_1[i].tolist(),
                                         lengths_sel[i].item()))
-                    if parse_ab and parse_ac and parse_bc:
+                    if parse_bc:
                         generation_res.append((word[i].cpu().numpy().tolist(),
                                                sel[i].cpu().numpy().tolist(),
-                                               heads_pred[i].tolist(),
+                                               [1]*lengths_sel[i].item(),
                                                sudo_heads_pred[i].tolist(),
                                                lengths_sel[i].item()))
                     else:
                         pass
-            # if len(generation_res) > 10:
-            #     break
+                print(len(generation_res))
+
+                if len(generation_res) > 2000:
+                    break
             #     if cnt > 500:
             #         break
         print('=='*10 + prefix + '=='*10)

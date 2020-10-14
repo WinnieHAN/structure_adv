@@ -1,6 +1,6 @@
 # Adversarial Attack and Defense of Structured Prediction Models
 
-- Source codes used in EMNLP 2020 paper, *Adversarial Attack and Defense of Structured Prediction Models*.
+Source codes used in EMNLP 2020 paper, *Adversarial Attack and Defense of Structured Prediction Models*.
 
 ## Requirements ##
 
