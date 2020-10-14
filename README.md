@@ -20,7 +20,7 @@ Source codes used in EMNLP 2020 paper, *Adversarial Attack and Defense of Struct
 
 2. For python 2 env, install pytorch 0.4.1, gensim, numpy, nltk. <br>
    For python 3 env, install pytorch >= 1.0, transformers, bert-score, pytorch-pretrained-bert and numpy <br>
-   You also can download these two enviroments from here. 
+   You also can download the python2 enviroments from [here](https://drive.google.com/file/d/1eP7Ig1o9LKe3WAYGvw488x2boBHBejXu/view?usp=sharing). 
 
 3. Downloading sskip embedding and conllu format PTB dataset.
 ## Dependency Parsing #
