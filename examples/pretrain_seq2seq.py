@@ -1,9 +1,5 @@
 from __future__ import print_function
 
-"""
-Implementation of Bi-directional LSTM-CNNs-TreeCRF model for Graph-based dependency parsing.
-"""
-
 import sys
 import os
 

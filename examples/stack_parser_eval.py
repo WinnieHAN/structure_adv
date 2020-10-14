@@ -1,10 +1,5 @@
 from __future__ import print_function
 
-__author__ = 'max'
-"""
-Implementation of Bi-directional LSTM-CNNs-TreeCRF model for Graph-based dependency parsing.
-"""
-
 import sys
 import os
 

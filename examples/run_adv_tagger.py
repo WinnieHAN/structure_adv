@@ -1,10 +1,5 @@
 from __future__ import print_function
 
-__author__ = 'max'
-"""
-Implementation of Bi-directional LSTM-CNNs-CRF model for POS tagging.
-"""
-
 import sys, os
 
 sys.path.append(".")
