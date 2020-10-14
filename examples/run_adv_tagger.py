@@ -52,9 +52,9 @@ def main():
     parser.add_argument('--unk_replace', type=float, default=0., help='The rate to replace a singleton word with UNK')
     parser.add_argument('--embedding', choices=['glove', 'senna', 'sskip', 'polyglot'], help='Embedding for words', required=True)
     parser.add_argument('--embedding_dict', help='path for embedding dict')
-    parser.add_argument('--train')  # "data/POS-penn/wsj/split1/wsj1.train.original"
-    parser.add_argument('--dev')  # "data/POS-penn/wsj/split1/wsj1.dev.original"
-    parser.add_argument('--test')  # "data/POS-penn/wsj/split1/wsj1.test.original"
+    parser.add_argument('--train')
+    parser.add_argument('--dev')
+    parser.add_argument('--test')
 
     parser.add_argument('--seq2seq_load_path', default='tagging_models/tagging/seq2seq/seq2seq_save_model', type=str, help='seq2seq_load_path')
     parser.add_argument('--network_load_path', default='tagging_models/tagging/seq2seq/network_save_model', type=str, help='network_load_path')
@@ -81,7 +81,7 @@ def main():
 
     args = parser.parse_args()
 
-    logger = get_logger("POSCRFTagger")
+    logger = get_logger("rl_train_pos")
 
     mode = args.mode
     train_path = args.train
