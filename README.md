@@ -55,7 +55,7 @@ $ /path/to/python2/envs/python examples/pretrain_seq2seq.py --cuda --mode LSTM \
 ```shell script
 $ sh examples/run_rl_graph_parser.py
 ``` 
-5. You also can download our trained model [here](https://drive.google.com/drive/folders/1GWSgZgNiCbDsZSQaiU_32AqCcGDIlNSo?usp=sharing). And run eval to get results report in paper.
+5. You also can download our trained model [here](https://drive.google.com/drive/folders/1GWSgZgNiCbDsZSQaiU_32AqCcGDIlNSo?usp=sharing). And run eval to get results reported in paper.
 ```shell script
 $ sh examples/eval_rl_graph_parser.py 
 ```
@@ -83,7 +83,7 @@ $ sh run_posCRFTagger.sh
 ```shell script
 $ sh examples/run_adv_tagger.sh
 ```
-5. You also can download our trained model [here](https://drive.google.com/drive/folders/1lCQjsAIjthcWRL2P3cL5dofwRnJAijdM?usp=sharing). And run eval to get results report in paper.
+5. You also can download our trained model [here](https://drive.google.com/drive/folders/1lCQjsAIjthcWRL2P3cL5dofwRnJAijdM?usp=sharing). And run eval to get results reported in paper.
 ```shell script
 $ sh examples/eval_adv_tagger.py 
 ```
